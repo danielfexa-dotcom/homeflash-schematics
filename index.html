@@ -12616,6 +12616,18 @@ document.addEventListener('keydown', (e) => {
     else groupSelected();
     return;
   }
+  // Lock / Unlock all
+  if (mod && e.key.toLowerCase() === 'l') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      LayersState.locked = new WeakSet();
+      if (typeof renderLayersPanel === 'function') renderLayersPanel();
+    } else {
+      const sel = EditorState.selectedElements.length > 0 ? EditorState.selectedElements : (EditorState.selectedElement ? [EditorState.selectedElement] : []);
+      for (const el of sel) toggleLayerLock(el);
+    }
+    return;
+  }
   // Select all
   if (mod && e.key.toLowerCase() === 'a') {
     e.preventDefault();
