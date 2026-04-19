@@ -11555,6 +11555,17 @@ bindCanvasEvents = function() {
       selectElement(null);
     }
   };
+  const editorModal = document.getElementById('ai-editor-modal');
+  if (editorModal && !editorModal._deselectBound) {
+    editorModal._deselectBound = true;
+    const deselectIds = new Set(['ai-canvas-body', 'ai-canvas-area', 'ai-artboard', 'editor-canvas-wrap', 'ruler-corner']);
+    const deselectClasses = ['ruler-top', 'ruler-left', 'ai-appbar', 'ai-control', 'ai-status'];
+    editorModal.addEventListener('click', (e) => {
+      if (!EditorState.selectedElement && EditorState.selectedElements.length === 0) return;
+      if (deselectIds.has(e.target.id)) { selectElement(null); return; }
+      if (deselectClasses.some(c => e.target.classList.contains(c))) { selectElement(null); return; }
+    });
+  }
 };
 
 // ============================================================
