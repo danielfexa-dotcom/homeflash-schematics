@@ -10899,6 +10899,8 @@ const LayersState = {
 // Meaningful label for an element
 function layerLabelFor(el) {
   const tag = el.tagName;
+  const dataName = el.getAttribute('data-name');
+  if (dataName) return { label: dataName, subtext: tag };
   const id = el.getAttribute('id');
   if (id) return { label: '#' + id, subtext: tag };
   const cls = el.getAttribute('class');
@@ -10911,8 +10913,9 @@ function layerLabelFor(el) {
   }
 
   if (tag === 'g') {
+    const name = el.getAttribute('data-name');
     const childCount = el.children.length;
-    return { label: 'Group', subtext: childCount + ' items' };
+    return { label: name || 'Group', subtext: childCount + ' items' };
   }
 
   if (tag === 'path') {
@@ -11047,6 +11050,34 @@ function renderLayersPanel() {
     } else {
       lbl.textContent = label;
     }
+    lbl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = el.getAttribute('data-name') || el.getAttribute('id') || '';
+      input.placeholder = label;
+      input.style.cssText = 'width:100%;font:inherit;font-size:11px;background:var(--card);border:1px solid var(--accent);padding:1px 4px;color:var(--ink);outline:none;border-radius:2px;';
+      lbl.innerHTML = '';
+      lbl.appendChild(input);
+      input.focus();
+      input.select();
+      const commit = () => {
+        const val = input.value.trim();
+        if (val) {
+          el.setAttribute('data-name', val);
+        } else {
+          el.removeAttribute('data-name');
+        }
+        pushHistory();
+        markDirty();
+        renderLayersPanel();
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', (ke) => {
+        if (ke.key === 'Enter') { ke.preventDefault(); input.blur(); }
+        if (ke.key === 'Escape') { ke.preventDefault(); input.value = ''; input.blur(); }
+      });
+    });
     row.appendChild(lbl);
 
     // Actions: visibility + lock
