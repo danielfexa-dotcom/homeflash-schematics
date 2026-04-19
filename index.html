@@ -12564,9 +12564,17 @@ function startPointDrag(e) {
   const handle = e.target;
   const draggedIdx = parseInt(handle.dataset.pointIdx, 10);
 
-  // If dragged point not in selection, select it alone (unless shift held)
-  if (!EditorState.selectedPointIndices.has(draggedIdx)) {
-    if (!e.shiftKey) EditorState.selectedPointIndices.clear();
+  const shiftHeld = e.shiftKey;
+  const alreadySelected = EditorState.selectedPointIndices.has(draggedIdx);
+
+  // Shift+click on already-selected point: defer toggle to mouseup (in case they drag)
+  if (shiftHeld) {
+    if (!alreadySelected) {
+      EditorState.selectedPointIndices.add(draggedIdx);
+      updatePointSelectionVisuals();
+    }
+  } else if (!alreadySelected) {
+    EditorState.selectedPointIndices.clear();
     EditorState.selectedPointIndices.add(draggedIdx);
     updatePointSelectionVisuals();
   }
@@ -12578,7 +12586,6 @@ function startPointDrag(e) {
   startSvg.x = e.clientX; startSvg.y = e.clientY;
   const startPt = startSvg.matrixTransform(inverseCTM);
 
-  // Snapshot original positions for all selected points
   const points = getEditablePoints(el);
   points.forEach((p, i) => { p.origX = p.x; p.origY = p.y; });
   const activeIndices = [...EditorState.selectedPointIndices];
@@ -12593,7 +12600,6 @@ function startPointDrag(e) {
     for (const idx of activeIndices) {
       applyPointDelta(el, points, idx, dx, dy);
     }
-    // Update handle positions visually
     const newScreenCTM = el.getScreenCTM();
     const canvasRect = getEditorCanvasEl().getBoundingClientRect();
     EditorState.pathPointHandles.forEach(h => {
@@ -12610,6 +12616,10 @@ function startPointDrag(e) {
   const onUp = () => {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    if (!moved && shiftHeld && alreadySelected) {
+      EditorState.selectedPointIndices.delete(draggedIdx);
+      updatePointSelectionVisuals();
+    }
     if (moved) { pushHistory(); markDirty(); drawPathPoints(); }
   };
   document.addEventListener('mousemove', onMove);
