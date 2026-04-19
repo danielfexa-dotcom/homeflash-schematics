@@ -10298,9 +10298,8 @@ function drawSelectionUI() {
   let bbox;
   try { bbox = el.getBBox(); } catch (e) { return; }
 
-  const ctm = el.getCTM();
-  if (!ctm) return;
-  const svgRect = svg.getBoundingClientRect();
+  const screenCTM = el.getScreenCTM();
+  if (!screenCTM) return;
   const canvasRect = canvas.getBoundingClientRect();
 
   const corners = [
@@ -10312,7 +10311,7 @@ function drawSelectionUI() {
   const points = corners.map(c => {
     const pt = svg.createSVGPoint();
     pt.x = c.x; pt.y = c.y;
-    return pt.matrixTransform(ctm);
+    return pt.matrixTransform(screenCTM);
   });
 
   const minX = Math.min(...points.map(p => p.x));
@@ -10320,14 +10319,10 @@ function drawSelectionUI() {
   const minY = Math.min(...points.map(p => p.y));
   const maxY = Math.max(...points.map(p => p.y));
 
-  const viewBox = svg.viewBox.baseVal;
-  const scaleX = svgRect.width / viewBox.width;
-  const scaleY = svgRect.height / viewBox.height;
-
-  const screenX = minX * scaleX + (svgRect.left - canvasRect.left);
-  const screenY = minY * scaleY + (svgRect.top - canvasRect.top);
-  const screenW = Math.max((maxX - minX) * scaleX, 10);
-  const screenH = Math.max((maxY - minY) * scaleY, 10);
+  const screenX = minX - canvasRect.left;
+  const screenY = minY - canvasRect.top;
+  const screenW = Math.max(maxX - minX, 10);
+  const screenH = Math.max(maxY - minY, 10);
 
   overlay.style.display = 'block';
   overlay.style.left = screenX + 'px';
@@ -10517,16 +10512,12 @@ function startRotate(e) {
   const centerY = bbox.y + bbox.height / 2;
 
   const svg = EditorState.workingSvgElement;
-  const svgRect = svg.getBoundingClientRect();
-  const viewBox = svg.viewBox.baseVal;
-  const scaleX = svgRect.width / viewBox.width;
-  const scaleY = svgRect.height / viewBox.height;
-  const ctm = el.getCTM();
+  const screenCTM = el.getScreenCTM();
   const pt = svg.createSVGPoint();
   pt.x = centerX; pt.y = centerY;
-  const centerScreen = pt.matrixTransform(ctm);
-  const screenCx = svgRect.left + centerScreen.x * scaleX;
-  const screenCy = svgRect.top + centerScreen.y * scaleY;
+  const centerScreen = pt.matrixTransform(screenCTM);
+  const screenCx = centerScreen.x;
+  const screenCy = centerScreen.y;
 
   const startTransform = parseTransform(el);
   const startAngle = Math.atan2(e.clientY - screenCy, e.clientX - screenCx);
@@ -10560,19 +10551,19 @@ function startTextEdit(textEl) {
   const svgRect = svg.getBoundingClientRect();
   const canvasRect = canvas.getBoundingClientRect();
   const bbox = textEl.getBBox();
-  const ctm = textEl.getCTM();
+  const screenCTM = textEl.getScreenCTM();
 
   const pt = svg.createSVGPoint();
   pt.x = bbox.x; pt.y = bbox.y;
-  const topLeft = pt.matrixTransform(ctm);
+  const topLeft = pt.matrixTransform(screenCTM);
 
-  const viewBox = svg.viewBox.baseVal;
-  const scaleX = svgRect.width / viewBox.width;
-  const scaleY = svgRect.height / viewBox.height;
+  const pt2 = svg.createSVGPoint();
+  pt2.x = bbox.x + bbox.width; pt2.y = bbox.y;
+  const topRight = pt2.matrixTransform(screenCTM);
 
-  const screenX = topLeft.x * scaleX + (svgRect.left - canvasRect.left);
-  const screenY = topLeft.y * scaleY + (svgRect.top - canvasRect.top);
-  const screenW = Math.max(bbox.width * scaleX, 80);
+  const screenX = topLeft.x - canvasRect.left;
+  const screenY = topLeft.y - canvasRect.top;
+  const screenW = Math.max(topRight.x - topLeft.x, 80);
 
   const input = document.createElement('input');
   input.type = 'text';
@@ -10581,7 +10572,8 @@ function startTextEdit(textEl) {
   input.style.left = screenX + 'px';
   input.style.top = screenY + 'px';
   input.style.width = screenW + 'px';
-  const fontSize = parseFloat(getComputedStyle(textEl).fontSize) * scaleY;
+  const svgScale = screenCTM.d;
+  const fontSize = parseFloat(getComputedStyle(textEl).fontSize) * svgScale;
   input.style.fontSize = fontSize + 'px';
 
   canvas.appendChild(input);
@@ -11167,10 +11159,9 @@ function drawHoverOutline(el) {
   const canvas = getEditorCanvasEl();
   let bbox;
   try { bbox = el.getBBox(); } catch { preview.style.display = 'none'; return; }
-  const ctm = el.getCTM();
-  if (!ctm) { preview.style.display = 'none'; return; }
+  const screenCTM = el.getScreenCTM();
+  if (!screenCTM) { preview.style.display = 'none'; return; }
 
-  const svgRect = svg.getBoundingClientRect();
   const canvasRect = canvas.getBoundingClientRect();
 
   const corners = [
@@ -11182,22 +11173,18 @@ function drawHoverOutline(el) {
   const points = corners.map(c => {
     const pt = svg.createSVGPoint();
     pt.x = c.x; pt.y = c.y;
-    return pt.matrixTransform(ctm);
+    return pt.matrixTransform(screenCTM);
   });
   const minX = Math.min(...points.map(p => p.x));
   const maxX = Math.max(...points.map(p => p.x));
   const minY = Math.min(...points.map(p => p.y));
   const maxY = Math.max(...points.map(p => p.y));
 
-  const viewBox = svg.viewBox.baseVal;
-  const scaleX = svgRect.width / viewBox.width;
-  const scaleY = svgRect.height / viewBox.height;
-
   preview.style.display = 'block';
-  preview.style.left = (minX * scaleX + (svgRect.left - canvasRect.left)) + 'px';
-  preview.style.top = (minY * scaleY + (svgRect.top - canvasRect.top)) + 'px';
-  preview.style.width = Math.max((maxX - minX) * scaleX, 6) + 'px';
-  preview.style.height = Math.max((maxY - minY) * scaleY, 6) + 'px';
+  preview.style.left = (minX - canvasRect.left) + 'px';
+  preview.style.top = (minY - canvasRect.top) + 'px';
+  preview.style.width = Math.max(maxX - minX, 6) + 'px';
+  preview.style.height = Math.max(maxY - minY, 6) + 'px';
 }
 
 function clearHoverOutline() {
@@ -11438,18 +11425,14 @@ drawSelectionUI = function() {
   const svg = EditorState.workingSvgElement;
   const canvas = getEditorCanvasEl();
   const overlay = document.getElementById('selection-overlay');
-  const svgRect = svg.getBoundingClientRect();
   const canvasRect = canvas.getBoundingClientRect();
-  const viewBox = svg.viewBox.baseVal;
-  const scaleX = svgRect.width / viewBox.width;
-  const scaleY = svgRect.height / viewBox.height;
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const el of sel) {
     let bbox;
     try { bbox = el.getBBox(); } catch { continue; }
-    const ctm = el.getCTM();
-    if (!ctm) continue;
+    const screenCTM = el.getScreenCTM();
+    if (!screenCTM) continue;
     const corners = [
       {x: bbox.x, y: bbox.y},
       {x: bbox.x + bbox.width, y: bbox.y},
@@ -11459,7 +11442,7 @@ drawSelectionUI = function() {
     for (const c of corners) {
       const pt = svg.createSVGPoint();
       pt.x = c.x; pt.y = c.y;
-      const t = pt.matrixTransform(ctm);
+      const t = pt.matrixTransform(screenCTM);
       if (t.x < minX) minX = t.x;
       if (t.y < minY) minY = t.y;
       if (t.x > maxX) maxX = t.x;
@@ -11468,10 +11451,10 @@ drawSelectionUI = function() {
   }
   if (!isFinite(minX)) { clearSelectionUI(); return; }
 
-  const screenX = minX * scaleX + (svgRect.left - canvasRect.left);
-  const screenY = minY * scaleY + (svgRect.top - canvasRect.top);
-  const screenW = Math.max((maxX - minX) * scaleX, 10);
-  const screenH = Math.max((maxY - minY) * scaleY, 10);
+  const screenX = minX - canvasRect.left;
+  const screenY = minY - canvasRect.top;
+  const screenW = Math.max(maxX - minX, 10);
+  const screenH = Math.max(maxY - minY, 10);
 
   overlay.style.display = 'block';
   overlay.style.left = screenX + 'px';
@@ -12324,24 +12307,20 @@ function drawPathPoints() {
   if (!el || el.tagName !== 'path') return;
   const svg = EditorState.workingSvgElement;
   const canvas = getEditorCanvasEl();
-  const svgRect = svg.getBoundingClientRect();
   const canvasRect = canvas.getBoundingClientRect();
-  const viewBox = svg.viewBox.baseVal;
-  const scaleX = svgRect.width / viewBox.width;
-  const scaleY = svgRect.height / viewBox.height;
 
   const d = el.getAttribute('d') || '';
   const segs = parsePathD(d);
-  const ctm = el.getCTM();
-  if (!ctm) return;
+  const screenCTM = el.getScreenCTM();
+  if (!screenCTM) return;
 
   segs.forEach((seg, idx) => {
     if (seg.upper === 'Z') return;
     const pt = svg.createSVGPoint();
     pt.x = seg.endX; pt.y = seg.endY;
-    const t = pt.matrixTransform(ctm);
-    const screenX = t.x * scaleX + (svgRect.left - canvasRect.left);
-    const screenY = t.y * scaleY + (svgRect.top - canvasRect.top);
+    const t = pt.matrixTransform(screenCTM);
+    const screenX = t.x - canvasRect.left;
+    const screenY = t.y - canvasRect.top;
     const handle = document.createElement('div');
     handle.className = 'path-point-handle';
     handle.style.left = (screenX - 5) + 'px';
