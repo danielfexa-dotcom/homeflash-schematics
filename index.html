@@ -13940,6 +13940,10 @@ openEditor = function(item) {
 
   pushHistory();
   bindCanvasEvents();
+
+  LayersState.locked = new WeakSet();
+  svg.querySelectorAll('[data-locked]').forEach(el => LayersState.locked.add(el));
+
   renderPropsPanel();
   if (typeof renderLayersPanel === 'function') renderLayersPanel();
   renderControlPanel();
