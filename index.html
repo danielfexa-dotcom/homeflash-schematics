@@ -10183,6 +10183,10 @@ function openEditor(item) {
 
   pushHistory();
   bindCanvasEvents();
+
+  LayersState.locked = new WeakSet();
+  svg.querySelectorAll('[data-locked]').forEach(el => LayersState.locked.add(el));
+
   renderPropsPanel();
 
   modal.classList.add('active');
@@ -11181,9 +11185,10 @@ function toggleLayerVisibility(el) {
 function toggleLayerLock(el) {
   if (LayersState.locked.has(el)) {
     LayersState.locked.delete(el);
+    el.removeAttribute('data-locked');
   } else {
     LayersState.locked.add(el);
-    // If this was selected, deselect
+    el.setAttribute('data-locked', '1');
     if (EditorState.selectedElement === el) {
       selectElement(null);
     }
@@ -12768,6 +12773,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'l') {
     e.preventDefault();
     if (e.shiftKey) {
+      if (EditorState.workingSvgElement) EditorState.workingSvgElement.querySelectorAll('[data-locked]').forEach(el => el.removeAttribute('data-locked'));
       LayersState.locked = new WeakSet();
       if (typeof renderLayersPanel === 'function') renderLayersPanel();
     } else {
