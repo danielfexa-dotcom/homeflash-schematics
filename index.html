@@ -11536,7 +11536,7 @@ bindCanvasEvents = function() {
       if (typeof LayersState !== 'undefined' && LayersState.locked.has(probe)) return;
       probe = probe.parentElement;
     }
-    const additive = e.shiftKey;
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     selectElement(target, additive);
   };
 
