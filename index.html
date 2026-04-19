@@ -13867,6 +13867,70 @@ function applyFillPattern(patternId) {
   renderColorPanel();
 }
 
+function getActivePatternId(el) {
+  const fill = el ? el.getAttribute('fill') || '' : '';
+  const m = fill.match(/url\(#([^)]+)\)/);
+  return m ? m[1] : null;
+}
+
+function changePatternColor(hex) {
+  const el = EditorState.selectedElement;
+  if (!el) return;
+  const patId = getActivePatternId(el);
+  if (!patId) return;
+  const svg = EditorState.workingSvgElement;
+  if (!svg) return;
+  const patEl = svg.querySelector('#' + patId);
+  if (!patEl) return;
+  patEl.querySelectorAll('line, path, circle, rect, polygon, polyline').forEach(child => {
+    if (child.getAttribute('stroke') && child.getAttribute('stroke') !== 'none') child.setAttribute('stroke', hex);
+    if (child.getAttribute('fill') && child.getAttribute('fill') !== 'none') child.setAttribute('fill', hex);
+  });
+  pushHistory(); markDirty();
+  renderColorPanel();
+}
+
+function changePatternBg(hex) {
+  const el = EditorState.selectedElement;
+  if (!el) return;
+  const patId = getActivePatternId(el);
+  if (!patId) return;
+  const svg = EditorState.workingSvgElement;
+  if (!svg) return;
+  const patEl = svg.querySelector('#' + patId);
+  if (!patEl) return;
+  const bgRect = patEl.querySelector('rect');
+  if (bgRect) {
+    bgRect.setAttribute('fill', hex);
+  } else {
+    const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const w = patEl.getAttribute('width') || '6';
+    const h = patEl.getAttribute('height') || '6';
+    r.setAttribute('width', w);
+    r.setAttribute('height', h);
+    r.setAttribute('fill', hex);
+    patEl.insertBefore(r, patEl.firstChild);
+  }
+  pushHistory(); markDirty();
+  renderColorPanel();
+}
+
+function getPatternColors(el) {
+  const patId = getActivePatternId(el);
+  if (!patId) return null;
+  const svg = EditorState.workingSvgElement;
+  const patEl = svg ? svg.querySelector('#' + patId) : null;
+  if (!patEl) return null;
+  let fg = null, bg = null;
+  patEl.querySelectorAll('line, path, circle, polygon, polyline').forEach(child => {
+    if (!fg && child.getAttribute('stroke') && child.getAttribute('stroke') !== 'none') fg = child.getAttribute('stroke');
+    if (!fg && child.getAttribute('fill') && child.getAttribute('fill') !== 'none') fg = child.getAttribute('fill');
+  });
+  const bgRect = patEl.querySelector('rect');
+  if (bgRect) bg = bgRect.getAttribute('fill');
+  return { fg: fg || '#888888', bg: bg || 'none' };
+}
+
 function renderColorPanel() {
   const body = document.getElementById('ai-color-body');
   if (!body) return;
@@ -13908,6 +13972,16 @@ function renderColorPanel() {
       html += '<div onclick="applyFillPattern(\'' + pat.id + '\')" title="' + pat.label + '" style="width:100%;aspect-ratio:1;border:' + border + ';border-radius:2px;cursor:pointer;overflow:hidden;background:white">' + preview + '</div>';
     }
     html += '</div>';
+    const patColors = getPatternColors(el);
+    if (patColors) {
+      html += '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;padding:8px;background:var(--bg);border-radius:3px">';
+      html += '<label style="font-size:9px;font-family:var(--mono);color:var(--ink-soft);text-transform:uppercase">Line</label>';
+      html += '<input type="color" value="' + patColors.fg + '" onchange="changePatternColor(this.value)" style="width:28px;height:28px;border:1px solid var(--line);background:none;cursor:pointer;padding:0">';
+      html += '<label style="font-size:9px;font-family:var(--mono);color:var(--ink-soft);text-transform:uppercase;margin-left:8px">BG</label>';
+      html += '<input type="color" value="' + (patColors.bg !== 'none' ? patColors.bg : '#ffffff') + '" onchange="changePatternBg(this.value)" style="width:28px;height:28px;border:1px solid var(--line);background:none;cursor:pointer;padding:0">';
+      html += '<button onclick="changePatternBg(\'none\')" style="font-size:9px;padding:2px 6px;cursor:pointer;background:var(--bg);border:1px solid var(--line);border-radius:2px;color:var(--ink-soft)" title="Transparent background">∅ BG</button>';
+      html += '</div>';
+    }
   }
   body.innerHTML = html;
 }
