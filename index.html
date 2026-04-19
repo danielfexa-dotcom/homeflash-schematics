@@ -9965,7 +9965,8 @@ function buildCard(item) {
   const downloadLink = card.querySelector('[data-action="download"]');
   downloadLink.addEventListener('click', (e) => {
     e.stopPropagation();
-    const blob = new Blob([item.svg], {type: 'image/svg+xml'});
+    const currentSvg = getItemSvg(item);
+    const blob = new Blob([currentSvg], {type: 'image/svg+xml'});
     downloadLink.href = URL.createObjectURL(blob);
     downloadLink.download = item.file.split('/').pop();
   });
@@ -10049,8 +10050,8 @@ const lbDownload = document.getElementById('lb-download');
 function openLightbox(item) {
   lbTitle.textContent = `[ ${item.ver} ] ${item.title}`;
   lbDesc.textContent = item.desc;
-  lbSvg.innerHTML = item.svg;
-  // Make the injected SVG scale to fit the lightbox viewport
+  const currentSvg = getItemSvg(item);
+  lbSvg.innerHTML = currentSvg;
   const svgEl = lbSvg.querySelector('svg');
   if (svgEl) {
     svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -10058,8 +10059,7 @@ function openLightbox(item) {
     svgEl.style.height = 'auto';
     svgEl.style.maxHeight = 'calc(90vh - 140px)';
   }
-  // Build blob URL for the download link so it works offline
-  const blob = new Blob([item.svg], {type: 'image/svg+xml'});
+  const blob = new Blob([currentSvg], {type: 'image/svg+xml'});
   lbDownload.href = URL.createObjectURL(blob);
   lbDownload.download = item.file.split('/').pop();
   lightbox.classList.add('active');
@@ -10774,6 +10774,7 @@ function saveEditor() {
   const edits = loadEdits();
   edits[EditorState.currentItem.file] = svgStr;
   saveEditsToStorage(edits);
+  EditorState.currentItem.svg = svgStr;
   refreshCardSvg(EditorState.currentItem, svgStr);
   closeEditor();
 }
@@ -10881,6 +10882,7 @@ function applyStoredEditsToCards() {
     const title = card.dataset.title;
     const item = items.find(i => i.title.toLowerCase() === title);
     if (item && edits[item.file]) {
+      item.svg = edits[item.file];
       const wrap = card.querySelector('.svg-wrap');
       if (wrap) wrap.innerHTML = edits[item.file];
     }
