@@ -10760,15 +10760,15 @@ window.setFontSize = function(val) {
 // ============================================================
 function saveEditor() {
   if (!EditorState.currentItem || !EditorState.workingSvgElement) return;
-  clearSelectionUI();
-  EditorState.selectedElement = null;
   const svgStr = EditorState.workingSvgElement.outerHTML;
   const edits = loadEdits();
   edits[EditorState.currentItem.file] = svgStr;
   saveEditsToStorage(edits);
   EditorState.currentItem.svg = svgStr;
   refreshCardSvg(EditorState.currentItem, svgStr);
-  closeEditor();
+  EditorState.dirty = false;
+  const dirtyDot = document.getElementById('editor-dirty') || document.getElementById('ai-dirty');
+  if (dirtyDot) dirtyDot.style.display = 'none';
 }
 
 function revertEditor() {
@@ -12559,6 +12559,8 @@ document.addEventListener('keydown', (e) => {
 
   const mod = e.ctrlKey || e.metaKey;
 
+  // Save
+  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); saveEditor(); return; }
   // Duplicate
   if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelected(); return; }
   // Copy
