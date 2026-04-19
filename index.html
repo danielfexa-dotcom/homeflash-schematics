@@ -10805,7 +10805,7 @@ function cancelEditor() {
 
 function refreshCardSvg(item, svgStr) {
   document.querySelectorAll('.card').forEach(card => {
-    if (card.dataset.title === item.title.toLowerCase()) {
+    if (card.dataset.title === item.title.toLowerCase() && card.dataset.category === item.category) {
       const wrap = card.querySelector('.svg-wrap');
       if (wrap) wrap.innerHTML = svgStr;
     }
@@ -10861,7 +10861,8 @@ document.addEventListener('click', (e) => {
     const card = editBtn.closest('.card');
     if (!card) return;
     const title = card.dataset.title;
-    const item = items.find(i => i.title.toLowerCase() === title);
+    const category = card.dataset.category;
+    const item = items.find(i => i.title.toLowerCase() === title && i.category === category);
     if (item) openEditor(item);
   }
 });
@@ -10872,7 +10873,8 @@ function applyStoredEditsToCards() {
   if (Object.keys(edits).length === 0) return;
   document.querySelectorAll('.card').forEach(card => {
     const title = card.dataset.title;
-    const item = items.find(i => i.title.toLowerCase() === title);
+    const category = card.dataset.category;
+    const item = items.find(i => i.title.toLowerCase() === title && i.category === category);
     if (item && edits[item.file]) {
       item.svg = edits[item.file];
       const wrap = card.querySelector('.svg-wrap');
