@@ -1111,6 +1111,17 @@
     z-index: 12;
     box-shadow: 0 0 0 1px var(--accent);
     box-sizing: border-box;
+    transition: opacity 0.1s, transform 0.1s;
+  }
+  .path-point-handle.dimmed {
+    opacity: 0.3;
+  }
+  .path-point-handle.selected-point {
+    background: white;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent), 0 0 6px var(--accent);
+    transform: scale(1.3);
+    opacity: 1;
   }
 
   /* Floating panels (snippets, versions, diff) */
@@ -11352,6 +11363,7 @@ EditorState.zoom = 1;
 EditorState.pan = { x: 0, y: 0 };
 EditorState.pathEditing = false;
 EditorState.pathPointHandles = [];
+EditorState.selectedPointIndices = new Set();
 EditorState.sideBySideItem = null;
 EditorState.swatches = loadSwatches();
 EditorState.snippets = loadSnippets();
@@ -12393,6 +12405,7 @@ function drawPathPoints() {
   if (!screenCTM) return;
 
   const points = getEditablePoints(el);
+  const hasSelection = EditorState.selectedPointIndices.size > 0;
   points.forEach((p, idx) => {
     const pt = svg.createSVGPoint();
     pt.x = p.x; pt.y = p.y;
@@ -12401,6 +12414,8 @@ function drawPathPoints() {
     const screenY = t.y - canvasRect.top;
     const handle = document.createElement('div');
     handle.className = 'path-point-handle';
+    if (EditorState.selectedPointIndices.has(idx)) handle.classList.add('selected-point');
+    else if (hasSelection) handle.classList.add('dimmed');
     handle.style.left = (screenX - 5) + 'px';
     handle.style.top = (screenY - 5) + 'px';
     handle.dataset.pointIdx = idx;
@@ -12409,14 +12424,88 @@ function drawPathPoints() {
     if (p.type === 'line') handle.dataset.lineAttr = p.attr;
     if (p.type === 'poly') handle.dataset.polyIdx = p.idx;
     handle.addEventListener('mousedown', startPointDrag);
+    handle.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const i = parseInt(handle.dataset.pointIdx, 10);
+      if (ev.shiftKey) {
+        if (EditorState.selectedPointIndices.has(i)) EditorState.selectedPointIndices.delete(i);
+        else EditorState.selectedPointIndices.add(i);
+      } else {
+        EditorState.selectedPointIndices.clear();
+        EditorState.selectedPointIndices.add(i);
+      }
+      updatePointSelectionVisuals();
+    });
     canvas.appendChild(handle);
     EditorState.pathPointHandles.push(handle);
+  });
+}
+
+function updatePointSelectionVisuals() {
+  const hasSelection = EditorState.selectedPointIndices.size > 0;
+  EditorState.pathPointHandles.forEach(h => {
+    const idx = parseInt(h.dataset.pointIdx, 10);
+    h.classList.toggle('selected-point', EditorState.selectedPointIndices.has(idx));
+    h.classList.toggle('dimmed', hasSelection && !EditorState.selectedPointIndices.has(idx));
   });
 }
 
 function clearPathPoints() {
   for (const h of EditorState.pathPointHandles) h.remove();
   EditorState.pathPointHandles = [];
+  EditorState.selectedPointIndices.clear();
+}
+
+function applyPointDelta(el, points, pointIdx, dx, dy) {
+  const p = points[pointIdx];
+  if (!p) return;
+  if (p.type === 'path') {
+    const segments = parsePathD(el.getAttribute('d') || '');
+    const seg = segments[p.segIdx];
+    if (!seg) return;
+    const newEndX = p.origX + dx, newEndY = p.origY + dy;
+    const upper = seg.upper;
+    if (upper === 'M' || upper === 'L' || upper === 'T') {
+      if (seg.rel) { seg.args[0] = newEndX - seg.curX; seg.args[1] = newEndY - seg.curY; }
+      else { seg.args[0] = newEndX; seg.args[1] = newEndY; }
+    } else if (upper === 'H') {
+      seg.args[0] = seg.rel ? newEndX - seg.curX : newEndX;
+    } else if (upper === 'V') {
+      seg.args[0] = seg.rel ? newEndY - seg.curY : newEndY;
+    } else if (upper === 'C') {
+      if (seg.rel) { seg.args[4] = newEndX - seg.curX; seg.args[5] = newEndY - seg.curY; }
+      else { seg.args[4] = newEndX; seg.args[5] = newEndY; }
+    } else if (upper === 'S' || upper === 'Q') {
+      if (seg.rel) { seg.args[2] = newEndX - seg.curX; seg.args[3] = newEndY - seg.curY; }
+      else { seg.args[2] = newEndX; seg.args[3] = newEndY; }
+    } else if (upper === 'A') {
+      if (seg.rel) { seg.args[5] = newEndX - seg.curX; seg.args[6] = newEndY - seg.curY; }
+      else { seg.args[5] = newEndX; seg.args[6] = newEndY; }
+    }
+    seg.endX = newEndX; seg.endY = newEndY;
+    el.setAttribute('d', reserializePath(segments));
+  } else if (p.type === 'line') {
+    el.setAttribute('x' + p.attr, p.origX + dx);
+    el.setAttribute('y' + p.attr, p.origY + dy);
+  } else if (p.type === 'poly') {
+    const pts = (el.getAttribute('points') || '').trim().split(/[\s,]+/).map(Number);
+    pts[p.idx * 2] = p.origX + dx;
+    pts[p.idx * 2 + 1] = p.origY + dy;
+    const pairs = [];
+    for (let i = 0; i < pts.length; i += 2) pairs.push(pts[i] + ',' + pts[i + 1]);
+    el.setAttribute('points', pairs.join(' '));
+  }
+}
+
+function nudgeSelectedPoints(dx, dy) {
+  const el = EditorState.selectedElement;
+  if (!el || EditorState.selectedPointIndices.size === 0) return;
+  const points = getEditablePoints(el);
+  points.forEach((p, i) => { p.origX = p.x; p.origY = p.y; });
+  for (const idx of EditorState.selectedPointIndices) {
+    applyPointDelta(el, points, idx, dx, dy);
+  }
+  pushHistory(); markDirty(); drawPathPoints();
 }
 
 function startPointDrag(e) {
@@ -12425,112 +12514,58 @@ function startPointDrag(e) {
   const el = EditorState.selectedElement;
   if (!el) return;
   const handle = e.target;
-  const pointType = handle.dataset.pointType;
+  const draggedIdx = parseInt(handle.dataset.pointIdx, 10);
+
+  // If dragged point not in selection, select it alone (unless shift held)
+  if (!EditorState.selectedPointIndices.has(draggedIdx)) {
+    if (!e.shiftKey) EditorState.selectedPointIndices.clear();
+    EditorState.selectedPointIndices.add(draggedIdx);
+    updatePointSelectionVisuals();
+  }
 
   const svg = EditorState.workingSvgElement;
   const screenCTM = el.getScreenCTM();
   const inverseCTM = screenCTM.inverse();
-
-  const startClient = { x: e.clientX, y: e.clientY };
   const startSvg = svg.createSVGPoint();
   startSvg.x = e.clientX; startSvg.y = e.clientY;
   const startPt = startSvg.matrixTransform(inverseCTM);
 
-  if (pointType === 'path') {
-    const segIdx = parseInt(handle.dataset.segmentIdx, 10);
-    const d = el.getAttribute('d') || '';
-    let segments = parsePathD(d);
-    const seg = segments[segIdx];
-    if (!seg) return;
-    const origEndX = seg.endX, origEndY = seg.endY;
+  // Snapshot original positions for all selected points
+  const points = getEditablePoints(el);
+  points.forEach((p, i) => { p.origX = p.x; p.origY = p.y; });
+  const activeIndices = [...EditorState.selectedPointIndices];
 
-    const onMove = (ev) => {
-      const curSvg = svg.createSVGPoint();
-      curSvg.x = ev.clientX; curSvg.y = ev.clientY;
-      const curPt = curSvg.matrixTransform(inverseCTM);
-      const dx = curPt.x - startPt.x, dy = curPt.y - startPt.y;
-      const newEndX = origEndX + dx, newEndY = origEndY + dy;
-      const upper = seg.upper;
-      if (upper === 'M' || upper === 'L' || upper === 'T') {
-        if (seg.rel) { seg.args[0] = newEndX - seg.curX; seg.args[1] = newEndY - seg.curY; }
-        else { seg.args[0] = newEndX; seg.args[1] = newEndY; }
-      } else if (upper === 'H') {
-        seg.args[0] = seg.rel ? newEndX - seg.curX : newEndX;
-      } else if (upper === 'V') {
-        seg.args[0] = seg.rel ? newEndY - seg.curY : newEndY;
-      } else if (upper === 'C') {
-        if (seg.rel) { seg.args[4] = newEndX - seg.curX; seg.args[5] = newEndY - seg.curY; }
-        else { seg.args[4] = newEndX; seg.args[5] = newEndY; }
-      } else if (upper === 'S' || upper === 'Q') {
-        if (seg.rel) { seg.args[2] = newEndX - seg.curX; seg.args[3] = newEndY - seg.curY; }
-        else { seg.args[2] = newEndX; seg.args[3] = newEndY; }
-      } else if (upper === 'A') {
-        if (seg.rel) { seg.args[5] = newEndX - seg.curX; seg.args[6] = newEndY - seg.curY; }
-        else { seg.args[5] = newEndX; seg.args[6] = newEndY; }
-      }
-      seg.endX = newEndX; seg.endY = newEndY;
-      el.setAttribute('d', reserializePath(segments));
-      handle.style.left = (ev.clientX - getEditorCanvasEl().getBoundingClientRect().left - 5) + 'px';
-      handle.style.top = (ev.clientY - getEditorCanvasEl().getBoundingClientRect().top - 5) + 'px';
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      pushHistory(); markDirty(); drawPathPoints();
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return;
-  }
-
-  if (pointType === 'line') {
-    const attr = handle.dataset.lineAttr;
-    const origX = parseFloat(el.getAttribute('x' + attr) || 0);
-    const origY = parseFloat(el.getAttribute('y' + attr) || 0);
-    const onMove = (ev) => {
-      const curSvg = svg.createSVGPoint();
-      curSvg.x = ev.clientX; curSvg.y = ev.clientY;
-      const curPt = curSvg.matrixTransform(inverseCTM);
-      el.setAttribute('x' + attr, origX + (curPt.x - startPt.x));
-      el.setAttribute('y' + attr, origY + (curPt.y - startPt.y));
-      handle.style.left = (ev.clientX - getEditorCanvasEl().getBoundingClientRect().left - 5) + 'px';
-      handle.style.top = (ev.clientY - getEditorCanvasEl().getBoundingClientRect().top - 5) + 'px';
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      pushHistory(); markDirty(); drawPathPoints();
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return;
-  }
-
-  if (pointType === 'poly') {
-    const polyIdx = parseInt(handle.dataset.polyIdx, 10);
-    const pts = (el.getAttribute('points') || '').trim().split(/[\s,]+/).map(Number);
-    const origX = pts[polyIdx * 2], origY = pts[polyIdx * 2 + 1];
-    const onMove = (ev) => {
-      const curSvg = svg.createSVGPoint();
-      curSvg.x = ev.clientX; curSvg.y = ev.clientY;
-      const curPt = curSvg.matrixTransform(inverseCTM);
-      pts[polyIdx * 2] = origX + (curPt.x - startPt.x);
-      pts[polyIdx * 2 + 1] = origY + (curPt.y - startPt.y);
-      const pairs = [];
-      for (let i = 0; i < pts.length; i += 2) pairs.push(pts[i] + ',' + pts[i + 1]);
-      el.setAttribute('points', pairs.join(' '));
-      handle.style.left = (ev.clientX - getEditorCanvasEl().getBoundingClientRect().left - 5) + 'px';
-      handle.style.top = (ev.clientY - getEditorCanvasEl().getBoundingClientRect().top - 5) + 'px';
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      pushHistory(); markDirty(); drawPathPoints();
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return;
-  }
+  let moved = false;
+  const onMove = (ev) => {
+    moved = true;
+    const curSvg = svg.createSVGPoint();
+    curSvg.x = ev.clientX; curSvg.y = ev.clientY;
+    const curPt = curSvg.matrixTransform(inverseCTM);
+    const dx = curPt.x - startPt.x, dy = curPt.y - startPt.y;
+    for (const idx of activeIndices) {
+      applyPointDelta(el, points, idx, dx, dy);
+    }
+    // Update handle positions visually
+    const newScreenCTM = el.getScreenCTM();
+    const canvasRect = getEditorCanvasEl().getBoundingClientRect();
+    EditorState.pathPointHandles.forEach(h => {
+      const hi = parseInt(h.dataset.pointIdx, 10);
+      if (!activeIndices.includes(hi)) return;
+      const p = points[hi];
+      const pt = svg.createSVGPoint();
+      pt.x = p.origX + dx; pt.y = p.origY + dy;
+      const t = pt.matrixTransform(newScreenCTM);
+      h.style.left = (t.x - canvasRect.left - 5) + 'px';
+      h.style.top = (t.y - canvasRect.top - 5) + 'px';
+    });
+  };
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if (moved) { pushHistory(); markDirty(); drawPathPoints(); }
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 function startPathPointDrag(e) { startPointDrag(e); }
@@ -12721,11 +12756,19 @@ document.addEventListener('keydown', (e) => {
   if (e.key === ']' && mod) { e.preventDefault(); bringForward(); return; }
   if (e.key === '[' && mod) { e.preventDefault(); sendBackward(); return; }
 
-  // Arrow key nudge
-  if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeSelected(e.shiftKey ? -10 : -1, 0); return; }
-  if (e.key === 'ArrowRight') { e.preventDefault(); nudgeSelected(e.shiftKey ? 10 : 1, 0); return; }
-  if (e.key === 'ArrowUp') { e.preventDefault(); nudgeSelected(0, e.shiftKey ? -10 : -1); return; }
-  if (e.key === 'ArrowDown') { e.preventDefault(); nudgeSelected(0, e.shiftKey ? 10 : 1); return; }
+  // Arrow key nudge — points if in point-edit mode, else whole elements
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+    e.preventDefault();
+    const step = e.shiftKey ? 10 : 1;
+    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+    if (EditorState.pathEditing && EditorState.selectedPointIndices.size > 0) {
+      nudgeSelectedPoints(dx, dy);
+    } else {
+      nudgeSelected(dx, dy);
+    }
+    return;
+  }
 });
 
 // ============================================================
