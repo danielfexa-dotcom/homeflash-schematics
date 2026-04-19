@@ -1668,8 +1668,8 @@
   }
   .ai-artboard svg {
     display: block;
-    width: 720px;
-    height: 720px;
+    max-width: 100%;
+    height: auto;
   }
 
   /* Canvas cursor varies by active tool */
@@ -13688,6 +13688,15 @@ openEditor = function(item) {
   wrapper.innerHTML = svgStr;
   const svg = wrapper.querySelector('svg');
   if (!svg) { alert('Could not parse SVG'); return; }
+  const vb = svg.viewBox.baseVal;
+  if (vb && vb.width && vb.height) {
+    const maxW = 900;
+    const w = Math.min(vb.width, maxW);
+    const h = w * (vb.height / vb.width);
+    artboard.style.width = w + 'px';
+    svg.style.width = w + 'px';
+    svg.style.height = h + 'px';
+  }
   const overlay = document.getElementById('selection-overlay');
   artboard.insertBefore(svg, overlay);
   EditorState.workingSvgElement = svg;
