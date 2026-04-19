@@ -12437,18 +12437,6 @@ function drawPathPoints() {
     if (p.type === 'line') handle.dataset.lineAttr = p.attr;
     if (p.type === 'poly') handle.dataset.polyIdx = p.idx;
     handle.addEventListener('mousedown', startPointDrag);
-    handle.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      const i = parseInt(handle.dataset.pointIdx, 10);
-      if (ev.shiftKey) {
-        if (EditorState.selectedPointIndices.has(i)) EditorState.selectedPointIndices.delete(i);
-        else EditorState.selectedPointIndices.add(i);
-      } else {
-        EditorState.selectedPointIndices.clear();
-        EditorState.selectedPointIndices.add(i);
-      }
-      updatePointSelectionVisuals();
-    });
     canvas.appendChild(handle);
     EditorState.pathPointHandles.push(handle);
   });
@@ -12565,13 +12553,13 @@ function startPointDrag(e) {
   e.stopPropagation();
   const el = EditorState.selectedElement;
   if (!el) return;
-  const handle = e.target;
+  const handle = e.currentTarget || e.target;
   const draggedIdx = parseInt(handle.dataset.pointIdx, 10);
+  if (isNaN(draggedIdx)) return;
 
-  const shiftHeld = e.shiftKey;
+  const shiftHeld = e.shiftKey || e.ctrlKey || e.metaKey;
   const alreadySelected = EditorState.selectedPointIndices.has(draggedIdx);
 
-  // Shift+click on already-selected point: defer toggle to mouseup (in case they drag)
   if (shiftHeld) {
     if (!alreadySelected) {
       EditorState.selectedPointIndices.add(draggedIdx);
@@ -12585,13 +12573,14 @@ function startPointDrag(e) {
 
   const svg = EditorState.workingSvgElement;
   const screenCTM = el.getScreenCTM();
+  if (!screenCTM) return;
   const inverseCTM = screenCTM.inverse();
   const startSvg = svg.createSVGPoint();
   startSvg.x = e.clientX; startSvg.y = e.clientY;
   const startPt = startSvg.matrixTransform(inverseCTM);
 
   const points = getEditablePoints(el);
-  points.forEach((p, i) => { p.origX = p.x; p.origY = p.y; });
+  points.forEach((p) => { p.origX = p.x; p.origY = p.y; });
   const activeIndices = [...EditorState.selectedPointIndices];
 
   let moved = false;
@@ -12617,11 +12606,16 @@ function startPointDrag(e) {
       h.style.top = (t.y - canvasRect.top - 5) + 'px';
     });
   };
-  const onUp = () => {
+  const onUp = (ev) => {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
-    if (!moved && shiftHeld && alreadySelected) {
-      EditorState.selectedPointIndices.delete(draggedIdx);
+    if (!moved) {
+      if (shiftHeld && alreadySelected) {
+        EditorState.selectedPointIndices.delete(draggedIdx);
+      } else if (!shiftHeld) {
+        EditorState.selectedPointIndices.clear();
+        EditorState.selectedPointIndices.add(draggedIdx);
+      }
       updatePointSelectionVisuals();
     }
     if (moved) { pushHistory(); markDirty(); drawPathPoints(); }
