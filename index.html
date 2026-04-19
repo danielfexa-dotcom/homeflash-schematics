@@ -10227,6 +10227,8 @@ function undo() {
   EditorState.workingSvgElement = svg;
   EditorState.selectedElement = null;
   clearSelectionUI();
+  LayersState.locked = new WeakSet();
+  svg.querySelectorAll('[data-locked]').forEach(el => LayersState.locked.add(el));
   renderPropsPanel();
   bindCanvasEvents();
   markDirty();
@@ -11193,6 +11195,8 @@ function toggleLayerLock(el) {
       selectElement(null);
     }
   }
+  pushHistory();
+  markDirty();
   renderLayersPanel();
 }
 
@@ -12402,7 +12406,7 @@ function getEditablePoints(el) {
 }
 
 function drawPathPoints() {
-  clearPathPoints();
+  clearPathPoints(false);
   const el = EditorState.selectedElement;
   if (!el) return;
   const tag = el.tagName;
@@ -12459,10 +12463,10 @@ function updatePointSelectionVisuals() {
   });
 }
 
-function clearPathPoints() {
+function clearPathPoints(clearSelection) {
   for (const h of EditorState.pathPointHandles) h.remove();
   EditorState.pathPointHandles = [];
-  EditorState.selectedPointIndices.clear();
+  if (clearSelection !== false) EditorState.selectedPointIndices.clear();
 }
 
 function applyPointDelta(el, points, pointIdx, dx, dy) {
