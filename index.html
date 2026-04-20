@@ -339,7 +339,7 @@
   }
 
   .card-actions {
-    display: flex; gap: 8px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
     padding: 10px 14px;
     border-top: 1px solid var(--line);
     background: var(--bg);
@@ -9973,6 +9973,7 @@ function buildCard(item) {
       <a class="primary" data-action="open">[ VIEW ]</a>
       <a data-action="edit">[ EDIT ]</a>
       <a data-action="download">[ DOWNLOAD ]</a>
+      <a data-action="duplicate">[ DUPLICATE ]</a>
     </div>
   `;
 
@@ -9987,6 +9988,22 @@ function buildCard(item) {
     const blob = new Blob([currentSvg], {type: 'image/svg+xml'});
     downloadLink.href = URL.createObjectURL(blob);
     downloadLink.download = item.file.split('/').pop();
+  });
+  card.querySelector('[data-action="duplicate"]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const clone = {
+      category: item.category,
+      ver: item.ver + ' COPY',
+      title: item.title + ' (Copy)',
+      file: item.file.replace('.svg', '-copy.svg'),
+      desc: 'Duplicate of ' + item.title,
+      svg: getItemSvg(item),
+      latest: false,
+    };
+    items.push(clone);
+    byCategory[clone.category].push(clone);
+    const grid = document.getElementById('grid-' + clone.category);
+    if (grid) grid.appendChild(buildCard(clone));
   });
   card.addEventListener('click', () => openLightbox(item));
 
