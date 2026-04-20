@@ -10036,24 +10036,41 @@ function buildCard(item) {
   });
   card.querySelector('[data-action="duplicate"]').addEventListener('click', (e) => {
     e.stopPropagation();
+    const ts = Date.now();
     const clone = {
       category: item.category,
       ver: item.ver + ' COPY',
       title: item.title + ' (Copy)',
-      file: item.file.replace('.svg', '-copy.svg'),
+      file: item.file.replace('.svg', '-dup-' + ts + '.svg'),
       desc: 'Duplicate of ' + item.title,
       svg: getItemSvg(item),
       latest: false,
+      _isDuplicate: true,
     };
     items.push(clone);
     byCategory[clone.category].push(clone);
     const grid = document.getElementById('grid-' + clone.category);
     if (grid) grid.appendChild(buildCard(clone));
+    updateCounts();
+    saveDuplicates();
   });
   card.addEventListener('click', () => openLightbox(item));
 
   return card;
 }
+
+// Duplicates persistence
+const DUPLICATES_STORAGE_KEY = 'homeflash-gallery-duplicates';
+function loadDuplicates() {
+  try { return JSON.parse(localStorage.getItem(DUPLICATES_STORAGE_KEY) || '[]'); } catch { return []; }
+}
+function saveDuplicates() {
+  const dupes = items.filter(i => i._isDuplicate);
+  try { localStorage.setItem(DUPLICATES_STORAGE_KEY, JSON.stringify(dupes)); } catch {}
+}
+
+// Restore saved duplicates
+loadDuplicates().forEach(d => { d._isDuplicate = true; items.push(d); });
 
 // Populate grids
 const byCategory = { hero: [], 'install-dark': [], 'install-light': [] };
@@ -10064,11 +10081,14 @@ byCategory['install-dark'].forEach(i => document.getElementById('grid-install-da
 byCategory['install-light'].forEach(i => document.getElementById('grid-install-light').appendChild(buildCard(i)));
 
 // Counts
-document.getElementById('sec-count-hero').textContent = `(${byCategory.hero.length})`;
-document.getElementById('sec-count-install-dark').textContent = `(${byCategory['install-dark'].length})`;
-document.getElementById('sec-count-install-light').textContent = `(${byCategory['install-light'].length})`;
-document.getElementById('total').textContent = items.length;
-document.getElementById('count').textContent = items.length;
+function updateCounts() {
+  document.getElementById('sec-count-hero').textContent = `(${byCategory.hero.length})`;
+  document.getElementById('sec-count-install-dark').textContent = `(${byCategory['install-dark'].length})`;
+  document.getElementById('sec-count-install-light').textContent = `(${byCategory['install-light'].length})`;
+  document.getElementById('total').textContent = items.length;
+  document.getElementById('count').textContent = items.length;
+}
+updateCounts();
 
 // ============================================================
 // FILTERING / SEARCH
@@ -10899,6 +10919,7 @@ function saveEditor() {
   edits[EditorState.currentItem.file] = svgStr;
   saveEditsToStorage(edits);
   EditorState.currentItem.svg = svgStr;
+  if (EditorState.currentItem._isDuplicate) saveDuplicates();
   refreshCardSvg(EditorState.currentItem, svgStr);
   EditorState.dirty = false;
   const dirtyDot = document.getElementById('editor-dirty') || document.getElementById('ai-dirty');
