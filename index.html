@@ -11594,6 +11594,11 @@ bindCanvasEvents = function() {
 
   svg.onclick = (e) => {
     e.stopPropagation();
+    const selectTool = AIEditor.tools && AIEditor.tools['select'];
+    if (selectTool && selectTool._suppressClick) {
+      selectTool._suppressClick = false;
+      return;
+    }
     const el = e.target;
     if (!el || el === svg) {
       selectElement(null);
@@ -11628,6 +11633,11 @@ bindCanvasEvents = function() {
 
   const canvas = getEditorCanvasEl();
   canvas.onclick = (e) => {
+    const selectTool = AIEditor.tools && AIEditor.tools['select'];
+    if (selectTool && selectTool._suppressClick) {
+      selectTool._suppressClick = false;
+      return;
+    }
     if (e.target === canvas || e.target.id === 'editor-canvas-wrap' || e.target.id === 'ai-canvas-body') {
       selectElement(null);
     }
@@ -11638,6 +11648,11 @@ bindCanvasEvents = function() {
     const deselectIds = new Set(['ai-canvas-body', 'ai-canvas-area', 'ai-artboard', 'editor-canvas-wrap', 'ruler-corner']);
     const deselectClasses = ['ruler-top', 'ruler-left', 'ai-appbar', 'ai-control', 'ai-status'];
     editorModal.addEventListener('click', (e) => {
+      const selectTool = AIEditor.tools && AIEditor.tools['select'];
+      if (selectTool && selectTool._suppressClick) {
+        selectTool._suppressClick = false;
+        return;
+      }
       if (!EditorState.selectedElement && EditorState.selectedElements.length === 0) return;
       if (deselectIds.has(e.target.id)) { selectElement(null); return; }
       if (deselectClasses.some(c => e.target.classList.contains(c))) { selectElement(null); return; }
@@ -12965,40 +12980,52 @@ function clientToSvg(clientX, clientY) {
 registerTool('select', {
   label: 'Selection',
   _marquee: null,
+  _suppressClick: false,
   onActivate() { updateCanvasCursor(); },
   onMouseDown(e) {
-    const target = e.target;
     const svg = EditorState.workingSvgElement;
     if (!svg) return;
-    if (svg.contains(target) && target !== svg) return;
-    e.preventDefault();
     const canvas = getEditorCanvasEl();
+    if (!canvas) return;
+    if (!canvas.contains(e.target) && e.target !== canvas) return;
+    e.preventDefault();
     const canvasRect = canvas.getBoundingClientRect();
     const startX = e.clientX - canvasRect.left;
     const startY = e.clientY - canvasRect.top;
-    const box = document.createElement('div');
-    box.className = 'marquee-rect';
-    canvas.appendChild(box);
-    const state = { box, startX, startY, canvasRect, svg, shiftHeld: e.shiftKey || e.ctrlKey || e.metaKey };
+    const state = { box: null, startX, startY, canvasRect, svg, shiftHeld: e.shiftKey || e.ctrlKey || e.metaKey, dragging: false };
     this._marquee = state;
+    this._suppressClick = false;
+    const DRAG_THRESHOLD = 5;
+    const tool = this;
     const onMove = (ev) => {
       const curX = ev.clientX - state.canvasRect.left;
       const curY = ev.clientY - state.canvasRect.top;
-      state.box.style.left = Math.min(state.startX, curX) + 'px';
-      state.box.style.top = Math.min(state.startY, curY) + 'px';
-      state.box.style.width = Math.abs(curX - state.startX) + 'px';
-      state.box.style.height = Math.abs(curY - state.startY) + 'px';
+      const dx = Math.abs(curX - state.startX), dy = Math.abs(curY - state.startY);
+      if (!state.dragging && (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD)) {
+        state.dragging = true;
+        tool._suppressClick = true;
+        const box = document.createElement('div');
+        box.className = 'marquee-rect';
+        canvas.appendChild(box);
+        state.box = box;
+      }
+      if (state.box) {
+        state.box.style.left = Math.min(state.startX, curX) + 'px';
+        state.box.style.top = Math.min(state.startY, curY) + 'px';
+        state.box.style.width = dx + 'px';
+        state.box.style.height = dy + 'px';
+      }
     };
     const onUp = (ev) => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      if (state.box) state.box.remove();
+      this._marquee = null;
+      if (!state.dragging) return;
       const curX = ev.clientX - state.canvasRect.left;
       const curY = ev.clientY - state.canvasRect.top;
       const left = Math.min(state.startX, curX), top = Math.min(state.startY, curY);
       const right = Math.max(state.startX, curX), bottom = Math.max(state.startY, curY);
-      state.box.remove();
-      this._marquee = null;
-      if (right - left < 3 && bottom - top < 3) return;
       if (!state.shiftHeld) { EditorState.selectedElements = []; EditorState.selectedElement = null; }
       const children = Array.from(state.svg.children).filter(c => c.tagName !== 'defs');
       const walk = (nodes) => {
