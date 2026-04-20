@@ -11551,7 +11551,15 @@ drawSelectionUI = function() {
 function startMultiMoveDrag(e) {
   e.preventDefault();
   e.stopPropagation();
-  const sel = EditorState.selectedElements.slice();
+  const selSet = new Set(EditorState.selectedElements);
+  const sel = EditorState.selectedElements.filter(el => {
+    let p = el.parentElement;
+    while (p && p !== EditorState.workingSvgElement) {
+      if (selSet.has(p)) return false;
+      p = p.parentElement;
+    }
+    return true;
+  });
   if (sel.length === 0) return;
 
   const startX = e.clientX;
@@ -13055,7 +13063,7 @@ registerTool('select', {
             }
             if (inside && !EditorState.selectedElements.includes(el)) EditorState.selectedElements.push(el);
           } catch(err) {}
-          if (el.tagName === 'g' && el.children.length) walk(Array.from(el.children));
+          if (el.tagName === 'g' && el.children.length && !inside) walk(Array.from(el.children));
         }
       };
       walk(children);
