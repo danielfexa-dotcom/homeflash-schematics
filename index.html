@@ -13598,9 +13598,18 @@ const TOOL_SHORTCUTS = {
   'z': 'zoom',
 };
 
+let _spaceHandPrevTool = null;
 document.addEventListener('keydown', (e) => {
   if (!EditorState.open) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  if (e.key === ' ' && !e.repeat) {
+    e.preventDefault();
+    if (AIEditor.currentTool !== 'hand') {
+      _spaceHandPrevTool = AIEditor.currentTool;
+      setActiveTool('hand');
+    }
+    return;
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const key = e.key.toLowerCase();
   if (TOOL_SHORTCUTS[key]) {
@@ -13608,9 +13617,14 @@ document.addEventListener('keydown', (e) => {
     setActiveTool(TOOL_SHORTCUTS[key]);
     return;
   }
-  // Also forward arbitrary keys to active tool
   const tool = AIEditor.tools[AIEditor.currentTool];
   if (tool && typeof tool.onKeyDown === 'function') tool.onKeyDown(e);
+});
+document.addEventListener('keyup', (e) => {
+  if (e.key === ' ' && _spaceHandPrevTool !== null) {
+    setActiveTool(_spaceHandPrevTool);
+    _spaceHandPrevTool = null;
+  }
 });
 
 function setStatusMessage(msg) {
