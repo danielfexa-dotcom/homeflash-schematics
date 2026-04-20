@@ -13044,6 +13044,7 @@ registerTool('select', {
       const walk = (nodes) => {
         for (const el of nodes) {
           if (LayersState.hidden.has(el) || LayersState.locked.has(el)) continue;
+          let inside = false;
           try {
             const bbox = el.getBBox();
             const ctm = el.getScreenCTM();
@@ -13054,7 +13055,6 @@ registerTool('select', {
               { x: bbox.x, y: bbox.y + bbox.height },
               { x: bbox.x + bbox.width, y: bbox.y + bbox.height },
             ];
-            let inside = false;
             for (const c of corners) {
               const pt = state.svg.createSVGPoint(); pt.x = c.x; pt.y = c.y;
               const s = pt.matrixTransform(ctm);
