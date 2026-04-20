@@ -11558,18 +11558,23 @@ function startMultiMoveDrag(e) {
   const startY = e.clientY;
   const initialTransforms = sel.map(el => parseTransform(el));
   const svg = EditorState.workingSvgElement;
-  const svgRect = svg.getBoundingClientRect();
-  const viewBox = svg.viewBox.baseVal;
-  const scaleX = viewBox.width / svgRect.width;
-  const scaleY = viewBox.height / svgRect.height;
+
+  const parentInvCTMs = sel.map(el => {
+    const parent = el.parentElement || svg;
+    const ctm = parent.getScreenCTM();
+    return ctm ? ctm.inverse() : svg.getScreenCTM().inverse();
+  });
 
   const onMove = (ev) => {
-    const dx = (ev.clientX - startX) * scaleX;
-    const dy = (ev.clientY - startY) * scaleY;
+    const screenDx = ev.clientX - startX;
+    const screenDy = ev.clientY - startY;
     for (let i = 0; i < sel.length; i++) {
+      const inv = parentInvCTMs[i];
+      const localDx = inv.a * screenDx + inv.c * screenDy;
+      const localDy = inv.b * screenDx + inv.d * screenDy;
       const t = Object.assign({}, initialTransforms[i]);
-      t.tx = initialTransforms[i].tx + dx;
-      t.ty = initialTransforms[i].ty + dy;
+      t.tx = initialTransforms[i].tx + localDx;
+      t.ty = initialTransforms[i].ty + localDy;
       applyTransform(sel[i], t);
     }
     drawSelectionUI();
