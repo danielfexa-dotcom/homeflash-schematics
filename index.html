@@ -12004,17 +12004,18 @@ function pasteClipboard() {
   const svg = EditorState.workingSvgElement;
   const newElements = [];
   for (const html of EditorState.clipboard) {
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = html;
-    const el = wrapper.firstElementChild;
-    if (!el) continue;
-    // Offset so the paste is visible
-    const t = parseTransform(el);
-    t.tx += 30;
-    t.ty += 30;
-    applyTransform(el, t);
-    svg.appendChild(el);
-    newElements.push(el);
+    // Use SVG-namespace DOMParser so elements render correctly
+    const svgDoc = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg">' + html + '</svg>',
+      'image/svg+xml'
+    );
+    const root = svgDoc.documentElement;
+    for (const child of Array.from(root.childNodes)) {
+      if (child.nodeType !== 1) continue;
+      const el = document.importNode(child, true);
+      svg.appendChild(el);
+      newElements.push(el);
+    }
   }
   EditorState.selectedElements = newElements;
   EditorState.selectedElement = newElements[newElements.length - 1] || null;
@@ -15328,9 +15329,24 @@ if (document.readyState === 'loading') {
 
 // ============================================================
 // FEATURE 2: CROSS-CARD COPY/PASTE
-// Paste raw outerHTML with exact same coordinates — no transform math.
+// Paste exact outerHTML into any card. Uses SVG-namespace parsing
+// to ensure elements render correctly in any destination SVG.
 // ============================================================
 (function() {
+  function parseSvgFragment(html) {
+    // Parse SVG content through a proper SVG namespace document
+    // so elements get the correct SVG namespace (not HTML namespace)
+    const svgDoc = new DOMParser().parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg">' + html + '</svg>',
+      'image/svg+xml'
+    );
+    const errNode = svgDoc.querySelector('parsererror');
+    if (errNode) return null;
+    const root = svgDoc.documentElement;
+    // Return all children of the wrapper <svg>
+    return Array.from(root.childNodes).filter(n => n.nodeType === 1);
+  }
+
   const __orig_pasteClipboard = pasteClipboard;
   pasteClipboard = function() {
     if (!EditorState.clipboard || EditorState.clipboard.length === 0) return;
@@ -15339,13 +15355,17 @@ if (document.readyState === 'loading') {
 
     const newElements = [];
     for (const html of EditorState.clipboard) {
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = html;
-      const el = wrapper.firstElementChild;
-      if (!el) continue;
-      svg.appendChild(el);
-      newElements.push(el);
+      const parsed = parseSvgFragment(html);
+      if (!parsed || parsed.length === 0) continue;
+      for (const el of parsed) {
+        // Import node into current document (cross-document adoption)
+        const imported = document.importNode(el, true);
+        svg.appendChild(imported);
+        newElements.push(imported);
+      }
     }
+
+    if (newElements.length === 0) return;
 
     EditorState.selectedElements = newElements;
     EditorState.selectedElement = newElements[newElements.length - 1] || null;
@@ -15354,6 +15374,168 @@ if (document.readyState === 'loading') {
     if (typeof renderLayersPanel === 'function') renderLayersPanel();
     pushHistory();
     markDirty();
+  };
+})();
+
+// ============================================================
+// FEATURE 9: ELEMENT TEMPLATES (save selection as reusable template)
+// ============================================================
+(function() {
+  const TEMPLATES_STORAGE_KEY = 'homeflash-gallery-templates';
+
+  function loadTemplates() {
+    try { return JSON.parse(localStorage.getItem(TEMPLATES_STORAGE_KEY) || '[]'); } catch { return []; }
+  }
+  function saveTemplates(list) {
+    try { localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(list)); } catch {}
+  }
+
+  // Save selected elements as a template
+  window.saveSelectionAsTemplate = function() {
+    const sel = EditorState.selectedElements;
+    if (!sel || sel.length === 0) { alert('Select elements first'); return; }
+
+    const name = prompt('Template name:');
+    if (!name || !name.trim()) return;
+
+    // Capture outerHTML of all selected + source viewBox
+    const svg = EditorState.workingSvgElement;
+    const vb = svg && svg.viewBox && svg.viewBox.baseVal;
+    const template = {
+      name: name.trim(),
+      created: Date.now(),
+      elements: sel.map(el => el.outerHTML),
+      viewBox: vb ? { x: vb.x, y: vb.y, w: vb.width, h: vb.height } : null,
+    };
+
+    const templates = loadTemplates();
+    templates.push(template);
+    saveTemplates(templates);
+    alert('Template "' + template.name + '" saved (' + sel.length + ' element' + (sel.length > 1 ? 's' : '') + ')');
+  };
+
+  // Insert a template into the current SVG
+  window.insertTemplate = function(index) {
+    const templates = loadTemplates();
+    const tpl = templates[index];
+    if (!tpl) return;
+
+    const svg = EditorState.workingSvgElement;
+    if (!svg) { alert('Open a card in the editor first'); return; }
+
+    const newElements = [];
+    for (const html of tpl.elements) {
+      const svgDoc = new DOMParser().parseFromString(
+        '<svg xmlns="http://www.w3.org/2000/svg">' + html + '</svg>',
+        'image/svg+xml'
+      );
+      const root = svgDoc.documentElement;
+      for (const child of Array.from(root.childNodes)) {
+        if (child.nodeType !== 1) continue;
+        const imported = document.importNode(child, true);
+        svg.appendChild(imported);
+        newElements.push(imported);
+      }
+    }
+
+    if (newElements.length === 0) return;
+    EditorState.selectedElements = newElements;
+    EditorState.selectedElement = newElements[newElements.length - 1] || null;
+    drawSelectionUI();
+    renderPropsPanel();
+    if (typeof renderLayersPanel === 'function') renderLayersPanel();
+    pushHistory();
+    markDirty();
+  };
+
+  // Delete a template
+  window.deleteTemplate = function(index) {
+    const templates = loadTemplates();
+    if (!templates[index]) return;
+    if (!confirm('Delete template "' + templates[index].name + '"?')) return;
+    templates.splice(index, 1);
+    saveTemplates(templates);
+    showTemplatesPanel();
+  };
+
+  // Show templates panel (modal overlay)
+  window.showTemplatesPanel = function() {
+    let panel = document.getElementById('templates-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'templates-panel';
+      panel.style.cssText = 'position:fixed;top:0;right:0;width:320px;height:100%;background:var(--card,#FAF7EF);border-left:1px solid var(--line,#C8C2B4);z-index:100002;overflow-y:auto;padding:16px;font-family:inherit;box-shadow:-4px 0 20px rgba(0,0,0,0.1);';
+      document.body.appendChild(panel);
+    }
+    panel.style.display = 'block';
+
+    const templates = loadTemplates();
+    let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+    html += '<h3 style="font-size:11px;letter-spacing:1.5px;color:var(--ink-soft,#7A7266);margin:0;">TEMPLATES (' + templates.length + ')</h3>';
+    html += '<button onclick="document.getElementById(\'templates-panel\').style.display=\'none\'" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--ink,#1A1F22);">×</button>';
+    html += '</div>';
+
+    if (EditorState.selectedElements && EditorState.selectedElements.length > 0) {
+      html += '<button onclick="saveSelectionAsTemplate()" style="width:100%;padding:8px;margin-bottom:16px;background:var(--accent,#00A050);color:white;border:none;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:1px;">+ SAVE SELECTION AS TEMPLATE</button>';
+    }
+
+    if (templates.length === 0) {
+      html += '<div style="color:var(--ink-faint,#A89F8E);font-size:11px;text-align:center;padding:40px 0;">No templates saved yet.<br>Select elements and save them as a template.</div>';
+    } else {
+      for (let i = 0; i < templates.length; i++) {
+        const tpl = templates[i];
+        const date = new Date(tpl.created).toLocaleDateString();
+        html += '<div style="border:1px solid var(--line,#C8C2B4);padding:10px;margin-bottom:8px;background:white;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+        html += '<strong style="font-size:12px;">' + tpl.name + '</strong>';
+        html += '<span style="font-size:9px;color:var(--ink-faint,#A89F8E);">' + tpl.elements.length + ' el · ' + date + '</span>';
+        html += '</div>';
+        html += '<div style="margin-top:8px;display:flex;gap:6px;">';
+        html += '<button onclick="insertTemplate(' + i + ')" style="flex:1;padding:5px;background:var(--ink,#1A1F22);color:white;border:none;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:0.5px;">INSERT</button>';
+        html += '<button onclick="deleteTemplate(' + i + ')" style="padding:5px 10px;background:none;border:1px solid var(--line,#C8C2B4);cursor:pointer;font-family:inherit;font-size:10px;color:var(--ink-soft,#7A7266);">DEL</button>';
+        html += '</div>';
+        html += '</div>';
+      }
+    }
+
+    panel.innerHTML = html;
+  };
+
+  // Add TEMPLATES button to the editor toolbar
+  function injectTemplateButton() {
+    // Inject into the appbar (Illustrator mode)
+    const aiSave = document.getElementById('ai-save');
+    if (aiSave && !document.getElementById('ai-templates-btn')) {
+      const btn = document.createElement('button');
+      btn.id = 'ai-templates-btn';
+      btn.textContent = 'TEMPLATES';
+      btn.title = 'Object templates library';
+      btn.addEventListener('click', showTemplatesPanel);
+      aiSave.parentElement.insertBefore(btn, aiSave);
+    }
+    // Also inject into legacy toolbar
+    const legacyVersions = document.querySelector('[onclick="showVersionsPanel()"]');
+    if (legacyVersions && !document.getElementById('legacy-templates-btn')) {
+      const btn = document.createElement('button');
+      btn.id = 'legacy-templates-btn';
+      btn.textContent = 'TEMPLATES';
+      btn.title = 'Object templates library';
+      btn.setAttribute('onclick', 'showTemplatesPanel()');
+      legacyVersions.parentElement.insertBefore(btn, legacyVersions);
+    }
+  }
+
+  // Inject on load + on editor open
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectTemplateButton);
+  } else {
+    setTimeout(injectTemplateButton, 100);
+  }
+
+  const __orig_openEditor_tpl = openEditor;
+  openEditor = function(item) {
+    __orig_openEditor_tpl(item);
+    setTimeout(injectTemplateButton, 100);
   };
 })();
 
