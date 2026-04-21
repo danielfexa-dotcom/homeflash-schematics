@@ -15268,6 +15268,33 @@ if (document.readyState === 'loading') {
     card.appendChild(delBtn);
     return card;
   };
+
+  // Retroactively add delete buttons to all cards already in the DOM
+  document.querySelectorAll('.card').forEach(cardEl => {
+    if (cardEl.querySelector('.card-delete-btn')) return;
+    // Find the item associated with this card
+    const file = cardEl.dataset.file;
+    const item = items.find(i => i.file.toLowerCase() === file);
+    if (!item) return;
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'card-delete-btn';
+    delBtn.title = 'Delete card';
+    delBtn.textContent = '×';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete "' + item.title + '"?')) return;
+      const idx = items.indexOf(item);
+      if (idx >= 0) items.splice(idx, 1);
+      const catArr = byCategory[item.category];
+      if (catArr) { const ci = catArr.indexOf(item); if (ci >= 0) catArr.splice(ci, 1); }
+      if (!item._isDuplicate) { const edits = loadEdits(); if (edits[item.file]) { delete edits[item.file]; saveEditsToStorage(edits); } }
+      if (item._isDuplicate) saveDuplicates();
+      cardEl.remove();
+      updateCounts();
+    });
+    cardEl.appendChild(delBtn);
+  });
 })();
 
 // ============================================================
