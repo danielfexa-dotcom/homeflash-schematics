@@ -2427,6 +2427,151 @@
   }
 }
 
+/* ============================================================
+   FEATURE CSS ADDITIONS
+   ============================================================ */
+
+/* Feature 1: Card Delete Button */
+.card { position: relative; }
+.card-delete-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  background: #c00;
+  color: #fff;
+  border: none;
+  border-radius: 2px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+  padding: 0;
+  font-family: inherit;
+}
+.card:hover .card-delete-btn { opacity: 1; }
+.card-delete-btn:hover { background: #900; }
+
+/* Feature 4: Layers expand/collapse all button */
+.layers-toggle-all-btn {
+  background: none;
+  border: 1px solid var(--outline-variant, #C2C9B9);
+  color: var(--ink, #1A1C1A);
+  font-size: 10px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 2px;
+  font-family: inherit;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.layers-toggle-all-btn:hover { background: var(--surface-container, #EEEEEA); }
+
+/* Feature 5: Layer drag reorder */
+.layer-drag-handle {
+  cursor: grab;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--outline, #72796C);
+  user-select: none;
+  flex-shrink: 0;
+}
+.layer-drag-handle:active { cursor: grabbing; }
+.layer-drag-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent, #174607);
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Feature 6: Stroke pattern button group */
+.stroke-pattern-group {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.stroke-pattern-btn {
+  flex: 1;
+  min-width: 40px;
+  padding: 4px 3px;
+  border: 1px solid var(--outline-variant, #C2C9B9);
+  background: var(--card, #fff);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-radius: 2px;
+  transition: background 0.1s, border-color 0.1s;
+}
+.stroke-pattern-btn:hover { background: var(--surface-container, #EEEEEA); }
+.stroke-pattern-btn.active { border-color: var(--primary, #174607); background: #eafce1; }
+.stroke-pattern-btn svg { display: block; }
+.stroke-pattern-label { font-size: 8px; letter-spacing: 0.5px; color: var(--outline, #72796C); }
+
+/* Feature 7: Line endpoint marker controls */
+.marker-group {
+  display: flex;
+  gap: 3px;
+}
+.marker-btn {
+  flex: 1;
+  padding: 3px 2px;
+  border: 1px solid var(--outline-variant, #C2C9B9);
+  background: var(--card, #fff);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  text-align: center;
+  border-radius: 2px;
+  transition: background 0.1s, border-color 0.1s;
+}
+.marker-btn:hover { background: var(--surface-container, #EEEEEA); }
+.marker-btn.active { border-color: var(--primary, #174607); background: #eafce1; }
+.marker-size-group {
+  display: flex;
+  gap: 3px;
+}
+.marker-size-btn {
+  flex: 1;
+  padding: 2px;
+  border: 1px solid var(--outline-variant, #C2C9B9);
+  background: var(--card, #fff);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  text-align: center;
+  border-radius: 2px;
+}
+.marker-size-btn:hover { background: var(--surface-container, #EEEEEA); }
+.marker-size-btn.active { border-color: var(--primary, #174607); background: #eafce1; }
+
+/* Text editor textarea */
+.text-editor-textarea {
+  position: absolute;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid var(--accent, #174607);
+  padding: 2px 4px;
+  font-family: inherit;
+  outline: none;
+  z-index: 200;
+  resize: both;
+  min-width: 80px;
+  min-height: 40px;
+  line-height: 1.3;
+}
+
 </style>
 </head>
 <body>
@@ -15075,6 +15220,850 @@ if (document.readyState === 'loading') {
 } else {
   setTimeout(initMobile, 50);
 }
+
+// ============================================================
+// FEATURE 1: CARD DELETE BUTTON
+// ============================================================
+(function() {
+  const __orig_buildCard = buildCard;
+  buildCard = function(item) {
+    const card = __orig_buildCard(item);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'card-delete-btn';
+    delBtn.title = 'Delete card';
+    delBtn.textContent = '×';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete "' + item.title + '"?')) return;
+
+      // Remove from items[]
+      const idx = items.indexOf(item);
+      if (idx >= 0) items.splice(idx, 1);
+
+      // Remove from byCategory
+      const catArr = byCategory[item.category];
+      if (catArr) {
+        const ci = catArr.indexOf(item);
+        if (ci >= 0) catArr.splice(ci, 1);
+      }
+
+      // Remove stored edits if not a duplicate
+      if (!item._isDuplicate) {
+        const edits = loadEdits();
+        if (edits[item.file]) {
+          delete edits[item.file];
+          saveEditsToStorage(edits);
+        }
+      }
+
+      // Save duplicates list if it was a duplicate
+      if (item._isDuplicate) saveDuplicates();
+
+      // Remove DOM card
+      card.remove();
+      updateCounts();
+    });
+
+    card.appendChild(delBtn);
+    return card;
+  };
+})();
+
+// ============================================================
+// FEATURE 2: CROSS-CARD COPY/PASTE (viewBox-aware)
+// ============================================================
+(function() {
+  const __orig_copySelected = copySelected;
+  copySelected = function() {
+    __orig_copySelected();
+    const svg = EditorState.workingSvgElement;
+    if (svg && EditorState.clipboard && EditorState.clipboard.length > 0) {
+      const vb = svg.viewBox && svg.viewBox.baseVal;
+      EditorState.clipboardViewBox = vb
+        ? { x: vb.x, y: vb.y, width: vb.width, height: vb.height }
+        : null;
+    }
+  };
+
+  const __orig_pasteClipboard = pasteClipboard;
+  pasteClipboard = function() {
+    if (!EditorState.clipboard || EditorState.clipboard.length === 0) return;
+    const svg = EditorState.workingSvgElement;
+    if (!svg) { __orig_pasteClipboard(); return; }
+
+    const srcVb = EditorState.clipboardViewBox;
+    const dstVbRaw = svg.viewBox && svg.viewBox.baseVal;
+    const dstVb = dstVbRaw
+      ? { x: dstVbRaw.x, y: dstVbRaw.y, width: dstVbRaw.width, height: dstVbRaw.height }
+      : null;
+
+    // If no source viewBox info or same dimensions, fall back to original
+    const sameViewBox = srcVb && dstVb &&
+      srcVb.width === dstVb.width && srcVb.height === dstVb.height;
+
+    if (!srcVb || !dstVb || sameViewBox) {
+      __orig_pasteClipboard();
+      return;
+    }
+
+    // Scale factors for cross-card paste
+    const scaleX = dstVb.width / srcVb.width;
+    const scaleY = dstVb.height / srcVb.height;
+
+    const newElements = [];
+    for (const html of EditorState.clipboard) {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = html;
+      const el = wrapper.firstElementChild;
+      if (!el) continue;
+      const t = parseTransform(el);
+      // Translate from source viewBox space to destination viewBox space
+      t.tx = (t.tx - srcVb.x) * scaleX + dstVb.x + 10;
+      t.ty = (t.ty - srcVb.y) * scaleY + dstVb.y + 10;
+      t.sx = t.sx * scaleX;
+      t.sy = t.sy * scaleY;
+      applyTransform(el, t);
+      svg.appendChild(el);
+      newElements.push(el);
+    }
+    EditorState.selectedElements = newElements;
+    EditorState.selectedElement = newElements[newElements.length - 1] || null;
+    drawSelectionUI();
+    renderPropsPanel();
+    if (typeof renderLayersPanel === 'function') renderLayersPanel();
+    pushHistory();
+    markDirty();
+  };
+})();
+
+// ============================================================
+// FEATURE 3: MULTI-LINE TEXT EDITING WITH <tspan>
+// ============================================================
+(function() {
+  const __orig_startTextEdit = startTextEdit;
+  startTextEdit = function(textEl) {
+    const svg = EditorState.workingSvgElement;
+    const canvas = getEditorCanvasEl();
+
+    let bbox;
+    try { bbox = textEl.getBBox(); } catch(e) { __orig_startTextEdit(textEl); return; }
+    const screenCTM = textEl.getScreenCTM();
+    if (!screenCTM) { __orig_startTextEdit(textEl); return; }
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const pt = svg.createSVGPoint();
+    pt.x = bbox.x; pt.y = bbox.y;
+    const topLeft = pt.matrixTransform(screenCTM);
+    const pt2 = svg.createSVGPoint();
+    pt2.x = bbox.x + bbox.width; pt2.y = bbox.y;
+    const topRight = pt2.matrixTransform(screenCTM);
+
+    const screenX = topLeft.x - canvasRect.left;
+    const screenY = topLeft.y - canvasRect.top;
+    const screenW = Math.max(topRight.x - topLeft.x, 120);
+    const svgScale = screenCTM.d;
+    const fontSize = parseFloat(getComputedStyle(textEl).fontSize) * svgScale || 14;
+
+    // Extract existing lines from <tspan> children or plain textContent
+    const existingTspans = Array.from(textEl.querySelectorAll('tspan'));
+    let currentText;
+    if (existingTspans.length > 0) {
+      currentText = existingTspans.map(ts => ts.textContent).join('\n');
+    } else {
+      currentText = textEl.textContent;
+    }
+
+    const ta = document.createElement('textarea');
+    ta.className = 'text-editor-textarea';
+    ta.value = currentText;
+    ta.style.left = screenX + 'px';
+    ta.style.top = screenY + 'px';
+    ta.style.width = (screenW + 20) + 'px';
+    ta.style.fontSize = fontSize + 'px';
+    ta.rows = Math.max(currentText.split('\n').length, 2);
+
+    canvas.appendChild(ta);
+    ta.focus();
+    ta.select();
+
+    const commit = () => {
+      const lines = ta.value.split('\n');
+      // Clear existing content
+      textEl.textContent = '';
+      Array.from(textEl.querySelectorAll('tspan')).forEach(ts => ts.remove());
+
+      const svgFontSize = parseFloat(textEl.getAttribute('font-size')) ||
+        parseFloat(textEl.getAttribute('font-size')) || 12;
+      const lineHeight = svgFontSize * 1.3;
+
+      if (lines.length === 1) {
+        // Single line — keep as plain text for compatibility
+        textEl.textContent = lines[0];
+      } else {
+        // Multi-line — use <tspan> per line
+        const baseY = parseFloat(textEl.getAttribute('y')) || 0;
+        lines.forEach((line, i) => {
+          const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+          tspan.setAttribute('x', textEl.getAttribute('x') || '0');
+          if (i === 0) {
+            tspan.setAttribute('y', baseY);
+          } else {
+            tspan.setAttribute('dy', lineHeight);
+          }
+          tspan.textContent = line;
+          textEl.appendChild(tspan);
+        });
+      }
+      ta.remove();
+      pushHistory();
+      markDirty();
+      renderPropsPanel();
+      drawSelectionUI();
+    };
+
+    ta.addEventListener('blur', commit);
+    ta.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') { ta.value = currentText; ta.blur(); }
+      // Enter inserts newline (default textarea behavior) — no preventDefault
+    });
+  };
+})();
+
+// ============================================================
+// FEATURE 4: LAYERS EXPAND/COLLAPSE ALL
+// ============================================================
+(function() {
+  function injectLayersToggleAll() {
+    const header = document.querySelector('.layers-header');
+    if (!header || header.querySelector('.layers-toggle-all-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'layers-toggle-all-btn';
+    btn.title = 'Expand / collapse all groups';
+    btn.textContent = '▾▾';
+    btn.addEventListener('click', () => {
+      const svg = EditorState.workingSvgElement;
+      if (!svg) return;
+      const groups = Array.from(svg.querySelectorAll('g')).filter(g => g.children.length > 0);
+      if (groups.length === 0) return;
+      const anyCollapsed = groups.some(g => LayersState.collapsed.has(g));
+      if (anyCollapsed) {
+        // Expand all
+        groups.forEach(g => LayersState.collapsed.delete(g));
+        btn.textContent = '▾▾';
+      } else {
+        // Collapse all
+        groups.forEach(g => LayersState.collapsed.add(g));
+        btn.textContent = '▸▸';
+      }
+      renderLayersPanel();
+    });
+    header.appendChild(btn);
+  }
+
+  const __orig_renderLayersPanel = renderLayersPanel;
+  renderLayersPanel = function() {
+    __orig_renderLayersPanel();
+    injectLayersToggleAll();
+    // Update toggle-all button icon
+    const svg = EditorState.workingSvgElement;
+    const btn = document.querySelector('.layers-toggle-all-btn');
+    if (btn && svg) {
+      const groups = Array.from(svg.querySelectorAll('g')).filter(g => g.children.length > 0);
+      const anyCollapsed = groups.some(g => LayersState.collapsed.has(g));
+      btn.textContent = anyCollapsed ? '▸▸' : '▾▾';
+    }
+  };
+
+  // Inject on editor open too
+  const __orig_openEditor_f4 = openEditor;
+  openEditor = function(item) {
+    __orig_openEditor_f4(item);
+    setTimeout(injectLayersToggleAll, 50);
+  };
+})();
+
+// ============================================================
+// FEATURE 5: LAYER DRAG REORDER
+// ============================================================
+(function() {
+  let _dragState = null;
+
+  function _getDragIndicator() {
+    let ind = document.getElementById('layer-drag-indicator');
+    if (!ind) {
+      ind = document.createElement('div');
+      ind.id = 'layer-drag-indicator';
+      ind.className = 'layer-drag-indicator';
+      ind.style.display = 'none';
+      document.body.appendChild(ind);
+    }
+    return ind;
+  }
+
+  function _getRowEl(el) {
+    let node = el;
+    while (node && !node.classList.contains('layer-row')) node = node.parentElement;
+    return node;
+  }
+
+  function _bindDragHandles() {
+    const tree = document.getElementById('layers-tree');
+    if (!tree) return;
+    tree.querySelectorAll('.layer-drag-handle').forEach(handle => {
+      if (handle.dataset.bound) return;
+      handle.dataset.bound = '1';
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const row = _getRowEl(handle);
+        if (!row) return;
+        // Find the SVG element associated with this row by its click handler
+        // We store the element reference on the row
+        const svgEl = row._layerSvgEl;
+        if (!svgEl) return;
+        _dragState = {
+          sourceRow: row,
+          sourceEl: svgEl,
+          startY: e.clientY,
+          indicator: _getDragIndicator(),
+        };
+        row.style.opacity = '0.5';
+        document.addEventListener('mousemove', _onDragMove);
+        document.addEventListener('mouseup', _onDragUp);
+      });
+    });
+  }
+
+  function _onDragMove(e) {
+    if (!_dragState) return;
+    const tree = document.getElementById('layers-tree');
+    if (!tree) return;
+    const rows = Array.from(tree.querySelectorAll('.layer-row'));
+    const ind = _dragState.indicator;
+
+    let targetRow = null;
+    let insertBefore = true;
+    for (const row of rows) {
+      if (row === _dragState.sourceRow) continue;
+      const rect = row.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if (e.clientY <= mid) {
+        targetRow = row;
+        insertBefore = true;
+        break;
+      }
+      targetRow = row;
+      insertBefore = false;
+    }
+
+    if (targetRow) {
+      const rect = targetRow.getBoundingClientRect();
+      const yPos = insertBefore ? rect.top : rect.bottom;
+      ind.style.display = 'block';
+      ind.style.top = (yPos + window.scrollY) + 'px';
+      ind.style.left = rect.left + 'px';
+      ind.style.width = rect.width + 'px';
+      _dragState.targetRow = targetRow;
+      _dragState.insertBefore = insertBefore;
+    } else {
+      ind.style.display = 'none';
+      _dragState.targetRow = null;
+    }
+  }
+
+  function _onDragUp() {
+    document.removeEventListener('mousemove', _onDragMove);
+    document.removeEventListener('mouseup', _onDragUp);
+    if (!_dragState) return;
+
+    const ind = _dragState.indicator;
+    ind.style.display = 'none';
+
+    const sourceEl = _dragState.sourceEl;
+    const targetRow = _dragState.targetRow;
+    const insertBefore = _dragState.insertBefore;
+
+    if (_dragState.sourceRow) _dragState.sourceRow.style.opacity = '';
+    _dragState = null;
+
+    if (!targetRow || !targetRow._layerSvgEl) return;
+    const targetEl = targetRow._layerSvgEl;
+    if (sourceEl === targetEl) return;
+
+    const parent = sourceEl.parentNode;
+    if (!parent) return;
+    if (insertBefore) {
+      parent.insertBefore(sourceEl, targetEl);
+    } else {
+      // Insert after targetEl
+      const nextSib = targetEl.nextSibling;
+      if (nextSib) parent.insertBefore(sourceEl, nextSib);
+      else parent.appendChild(sourceEl);
+    }
+
+    pushHistory();
+    markDirty();
+    renderLayersPanel();
+    drawSelectionUI();
+  }
+
+  // Patch renderLayersPanel to inject drag handles and store element refs
+  const __orig_renderLayersPanel_f5 = renderLayersPanel;
+  renderLayersPanel = function() {
+    __orig_renderLayersPanel_f5();
+    const tree = document.getElementById('layers-tree');
+    if (!tree) return;
+    // We need to inject drag handles into each row and store SVG el refs
+    // Re-traverse the SVG to match rows (they're in same order)
+    const svg = EditorState.workingSvgElement;
+    if (!svg) return;
+
+    // Get all visible layer rows and match to their elements
+    // We stored _layerSvgEl during row creation — but since we don't control
+    // renderNode directly, we attach via an extra patch on the rows.
+    // Strategy: walk tree children and rows in parallel (they're added in order by renderNode)
+    // Instead, attach element refs by using a data attribute approach:
+    // We'll add a data-layer-idx to each row during our row injection.
+    const rows = Array.from(tree.querySelectorAll('.layer-row'));
+    rows.forEach(row => {
+      if (row._layerSvgEl) return; // already assigned
+      // Try to find the element by checking if it matches selected state or hover
+      // Fallback: inject handles without el refs (won't work for drag)
+    });
+
+    // A cleaner approach: re-patch renderNode via the existing renderLayersPanel
+    // We inject handles on rows that have already been assigned _layerSvgEl
+    // Assignment happens via the monkey-patch in _patchRenderNodeForDrag below
+    _bindDragHandles();
+  };
+
+  // The real trick: patch the renderLayersPanel output so each row gets its SVG el reference.
+  // We do this by patching at the source: override the renderLayersPanel to use our wrapper.
+  // Since renderNode is a closure inside renderLayersPanel, we must re-implement the injection
+  // by overriding the full renderLayersPanel function once more.
+  const __base_renderLayersPanel = renderLayersPanel;
+  renderLayersPanel = function() {
+    // Run the base (which already has all previous patches)
+    __base_renderLayersPanel();
+    // Now walk DOM rows and SVG elements in tandem to assign _layerSvgEl
+    const svg = EditorState.workingSvgElement;
+    const tree = document.getElementById('layers-tree');
+    if (!svg || !tree) return;
+
+    // Build ordered flat list of SVG elements (same order as renderNode traversal)
+    const svgEls = [];
+    function collectEls(el, depth) {
+      const topLevelChildren = depth === -1
+        ? Array.from(el.children).filter(c => c.tagName !== 'defs')
+        : Array.from(el.children);
+      for (const child of topLevelChildren) {
+        svgEls.push(child);
+        if (child.tagName === 'g' && child.children.length > 0 && !LayersState.collapsed.has(child)) {
+          collectEls(child, depth + 1);
+        }
+      }
+    }
+    collectEls(svg, -1);
+
+    const rows = Array.from(tree.querySelectorAll('.layer-row'));
+    // Match by index (both should be in same order)
+    rows.forEach((row, i) => {
+      if (svgEls[i]) {
+        row._layerSvgEl = svgEls[i];
+        // Inject drag handle if not already present
+        if (!row.querySelector('.layer-drag-handle')) {
+          const handle = document.createElement('span');
+          handle.className = 'layer-drag-handle';
+          handle.title = 'Drag to reorder';
+          handle.textContent = '⠿';
+          row.insertBefore(handle, row.firstChild);
+        }
+      }
+    });
+    _bindDragHandles();
+  };
+})();
+
+// ============================================================
+// FEATURE 6: STROKE PATTERNS (visual button group in props panel)
+// ============================================================
+(function() {
+  const STROKE_PATTERNS = [
+    { value: '',        label: 'Solid',   dasharray: 'none' },
+    { value: '6 3',     label: 'Dash',    dasharray: '6 3' },
+    { value: '2 3',     label: 'Dot',     dasharray: '2 3' },
+    { value: '6 3 2 3', label: 'D-Dot',   dasharray: '6 3 2 3' },
+  ];
+
+  function strokePatternSvg(pattern) {
+    const da = pattern.dasharray === 'none' ? '' : `stroke-dasharray="${pattern.dasharray}"`;
+    return `<svg width="36" height="10" viewBox="0 0 36 10" xmlns="http://www.w3.org/2000/svg">
+      <line x1="2" y1="5" x2="34" y2="5" stroke="#1A1C1A" stroke-width="2" ${da}/>
+    </svg>`;
+  }
+
+  window.setStrokePatternFeature6 = function(value) {
+    const sel = EditorState.selectedElements;
+    if (!sel || sel.length === 0) return;
+    for (const el of sel) {
+      if (value === '') {
+        el.removeAttribute('stroke-dasharray');
+      } else {
+        el.setAttribute('stroke-dasharray', value);
+      }
+    }
+    pushHistory();
+    markDirty();
+    renderPropsPanel();
+  };
+
+  const __orig_renderPropsPanel_f6 = renderPropsPanel;
+  renderPropsPanel = function() {
+    __orig_renderPropsPanel_f6();
+    const el = EditorState.selectedElement;
+    if (!el) return;
+    const panel = document.getElementById('editor-props');
+
+    // Find the dash select and replace with button group
+    const select = panel.querySelector('select[onchange="setStrokeDash(this.value)"]');
+    if (!select) return;
+
+    const currentDash = el.getAttribute('stroke-dasharray') || '';
+    const propRow = select.closest('.prop-row') || select.parentElement;
+    if (!propRow) return;
+
+    const btnGroup = document.createElement('div');
+    btnGroup.className = 'stroke-pattern-group';
+
+    STROKE_PATTERNS.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'stroke-pattern-btn' + (currentDash === p.value ? ' active' : '');
+      btn.innerHTML = strokePatternSvg(p) + '<span class="stroke-pattern-label">' + p.label + '</span>';
+      btn.onclick = () => window.setStrokePatternFeature6(p.value);
+      btnGroup.appendChild(btn);
+    });
+
+    propRow.replaceChild(btnGroup, select);
+  };
+})();
+
+// ============================================================
+// FEATURE 7: LINE ENDPOINTS (ARROWHEADS / CIRCLES)
+// ============================================================
+(function() {
+  const MARKER_SIZES = { S: 4, M: 6, L: 9, XL: 13 };
+  const DEFAULT_MARKER_SIZE = 'M';
+
+  function ensureDefs(svg) {
+    let defs = svg.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      svg.insertBefore(defs, svg.firstChild);
+    }
+    return defs;
+  }
+
+  function getOrCreateMarker(svg, type, size) {
+    if (type === 'none') return null;
+    const id = 'hf-marker-' + type + '-' + size;
+    let existing = svg.getElementById(id);
+    if (existing) return id;
+
+    const defs = ensureDefs(svg);
+    const sz = MARKER_SIZES[size] || MARKER_SIZES.M;
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', id);
+    marker.setAttribute('markerUnits', 'strokeWidth');
+    marker.setAttribute('orient', 'auto');
+    marker.setAttribute('refX', sz / 2);
+    marker.setAttribute('refY', sz / 2);
+    marker.setAttribute('markerWidth', sz);
+    marker.setAttribute('markerHeight', sz);
+
+    if (type === 'arrow') {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M0,0 L${sz},${sz/2} L0,${sz} Z`);
+      path.setAttribute('fill', 'context-stroke');
+      path.setAttribute('fill', 'inherit');
+      path.style.fill = 'inherit';
+      marker.setAttribute('refX', sz - 1);
+      marker.appendChild(path);
+    } else if (type === 'circle') {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      const r = sz / 2 - 0.5;
+      circle.setAttribute('cx', sz / 2);
+      circle.setAttribute('cy', sz / 2);
+      circle.setAttribute('r', r);
+      circle.setAttribute('fill', 'inherit');
+      circle.style.fill = 'inherit';
+      marker.appendChild(circle);
+    }
+
+    defs.appendChild(marker);
+    return id;
+  }
+
+  window.setMarkerFeature7 = function(end, type, size) {
+    const el = EditorState.selectedElement;
+    if (!el) return;
+    const svg = EditorState.workingSvgElement;
+    const sizeKey = size || DEFAULT_MARKER_SIZE;
+    if (type === 'none') {
+      if (end === 'start') el.removeAttribute('marker-start');
+      else el.removeAttribute('marker-end');
+    } else {
+      const id = getOrCreateMarker(svg, type, sizeKey);
+      const attr = end === 'start' ? 'marker-start' : 'marker-end';
+      el.setAttribute(attr, 'url(#' + id + ')');
+    }
+    pushHistory();
+    markDirty();
+    renderPropsPanel();
+  };
+
+  function _currentMarkerType(el, end) {
+    const attr = end === 'start' ? el.getAttribute('marker-start') : el.getAttribute('marker-end');
+    if (!attr || attr === 'none') return 'none';
+    if (attr.includes('arrow')) return 'arrow';
+    if (attr.includes('circle')) return 'circle';
+    return 'none';
+  }
+
+  function _currentMarkerSize(el, end) {
+    const attr = end === 'start' ? el.getAttribute('marker-start') : el.getAttribute('marker-end');
+    if (!attr) return DEFAULT_MARKER_SIZE;
+    for (const s of Object.keys(MARKER_SIZES)) {
+      if (attr.includes('-' + s)) return s;
+    }
+    return DEFAULT_MARKER_SIZE;
+  }
+
+  const __orig_renderPropsPanel_f7 = renderPropsPanel;
+  renderPropsPanel = function() {
+    __orig_renderPropsPanel_f7();
+    const el = EditorState.selectedElement;
+    if (!el) return;
+    const tag = el.tagName;
+    if (tag !== 'line' && tag !== 'path' && tag !== 'polyline') return;
+
+    const panel = document.getElementById('editor-props');
+    const tip = panel.querySelector('.tip');
+
+    const markerHtml = document.createElement('div');
+
+    const title = document.createElement('h3');
+    title.textContent = 'ENDPOINTS';
+    markerHtml.appendChild(title);
+
+    const propGroupEl = document.createElement('div');
+    propGroupEl.className = 'prop-group';
+
+    ['start', 'end'].forEach(end => {
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'prop-row';
+      const lbl = document.createElement('label');
+      lbl.textContent = end === 'start' ? 'Start' : 'End';
+      rowDiv.appendChild(lbl);
+
+      const btnGroup = document.createElement('div');
+      btnGroup.className = 'marker-group';
+      const currentType = _currentMarkerType(el, end);
+      const currentSize = _currentMarkerSize(el, end);
+
+      ['none', 'arrow', 'circle'].forEach(type => {
+        const btn = document.createElement('button');
+        btn.className = 'marker-btn' + (currentType === type ? ' active' : '');
+        btn.textContent = type === 'none' ? '—' : type === 'arrow' ? '→' : '●';
+        btn.title = type;
+        btn.onclick = () => window.setMarkerFeature7(end, type, currentSize);
+        btnGroup.appendChild(btn);
+      });
+      rowDiv.appendChild(btnGroup);
+      propGroupEl.appendChild(rowDiv);
+
+      // Size row (only show if not 'none')
+      if (currentType !== 'none') {
+        const sizeRow = document.createElement('div');
+        sizeRow.className = 'prop-row';
+        const sizeLbl = document.createElement('label');
+        sizeLbl.textContent = end + ' sz';
+        sizeRow.appendChild(sizeLbl);
+        const sizeGroup = document.createElement('div');
+        sizeGroup.className = 'marker-size-group';
+        Object.keys(MARKER_SIZES).forEach(s => {
+          const sBtn = document.createElement('button');
+          sBtn.className = 'marker-size-btn' + (currentSize === s ? ' active' : '');
+          sBtn.textContent = s;
+          sBtn.onclick = () => window.setMarkerFeature7(end, currentType, s);
+          sizeGroup.appendChild(sBtn);
+        });
+        sizeRow.appendChild(sizeGroup);
+        propGroupEl.appendChild(sizeRow);
+      }
+    });
+
+    markerHtml.appendChild(propGroupEl);
+
+    if (tip) panel.insertBefore(markerHtml, tip);
+    else panel.appendChild(markerHtml);
+  };
+})();
+
+// ============================================================
+// FEATURE 8: MULTI-SELECTION PROPORTIONAL RESIZE
+// ============================================================
+(function() {
+  // Patch startResize to handle multi-select case
+  const __orig_startResize = startResize;
+  startResize = function(e, handle) {
+    const sel = EditorState.selectedElements;
+    if (!sel || sel.length <= 1) {
+      return __orig_startResize(e, handle);
+    }
+
+    // Multi-select proportional resize
+    e.preventDefault();
+    e.stopPropagation();
+
+    const svg = EditorState.workingSvgElement;
+    const svgRect = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    const scaleX = viewBox.width / svgRect.width;
+    const scaleY = viewBox.height / svgRect.height;
+
+    // Compute union bounding box in SVG coords
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of sel) {
+      let bbox;
+      try { bbox = el.getBBox(); } catch { continue; }
+      const ctm = el.getScreenCTM();
+      if (!ctm) continue;
+      const invSvgCTM = svg.getScreenCTM().inverse();
+      const toSvg = (px, py) => {
+        const pt = svg.createSVGPoint();
+        pt.x = px; pt.y = py;
+        return pt.matrixTransform(ctm).matrixTransform(invSvgCTM);
+      };
+      const corners = [
+        toSvg(bbox.x, bbox.y),
+        toSvg(bbox.x + bbox.width, bbox.y),
+        toSvg(bbox.x, bbox.y + bbox.height),
+        toSvg(bbox.x + bbox.width, bbox.y + bbox.height),
+      ];
+      for (const c of corners) {
+        if (c.x < minX) minX = c.x;
+        if (c.y < minY) minY = c.y;
+        if (c.x > maxX) maxX = c.x;
+        if (c.y > maxY) maxY = c.y;
+      }
+    }
+    if (!isFinite(minX)) return;
+
+    const unionW = maxX - minX;
+    const unionH = maxY - minY;
+    if (unionW < 1 || unionH < 1) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startTransforms = sel.map(el => parseTransform(el));
+    const startStrokeWidths = sel.map(el => parseFloat(el.getAttribute('stroke-width') || '1'));
+
+    // Anchor points for each handle (in SVG coords)
+    const anchors = {
+      nw: { x: maxX, y: maxY },
+      ne: { x: minX, y: maxY },
+      sw: { x: maxX, y: minY },
+      se: { x: minX, y: minY },
+      n:  { x: (minX + maxX) / 2, y: maxY },
+      s:  { x: (minX + maxX) / 2, y: minY },
+      w:  { x: maxX, y: (minY + maxY) / 2 },
+      e:  { x: minX, y: (minY + maxY) / 2 },
+    };
+    const anchor = anchors[handle] || anchors.se;
+
+    const onMove = (ev) => {
+      const dx = (ev.clientX - startX) * scaleX;
+      const dy = (ev.clientY - startY) * scaleY;
+      let sxFactor = 1, syFactor = 1;
+      if (handle.includes('e')) sxFactor = (unionW + dx) / unionW;
+      if (handle.includes('w')) sxFactor = (unionW - dx) / unionW;
+      if (handle.includes('s')) syFactor = (unionH + dy) / unionH;
+      if (handle.includes('n')) syFactor = (unionH - dy) / unionH;
+      if (handle === 'n' || handle === 's') sxFactor = 1;
+      if (handle === 'e' || handle === 'w') syFactor = 1;
+      if (Math.abs(sxFactor) < 0.05) sxFactor = 0.05;
+      if (Math.abs(syFactor) < 0.05) syFactor = 0.05;
+
+      for (let i = 0; i < sel.length; i++) {
+        const el = sel[i];
+        const st = startTransforms[i];
+        const t = Object.assign({}, st);
+        t.sx = st.sx * sxFactor;
+        t.sy = st.sy * syFactor;
+        t.tx = st.tx + anchor.x * (st.sx - t.sx);
+        t.ty = st.ty + anchor.y * (st.sy - t.sy);
+        applyTransform(el, t);
+
+        // Scale stroke-width proportionally
+        const avgScale = (Math.abs(sxFactor) + Math.abs(syFactor)) / 2;
+        const sw = startStrokeWidths[i] * avgScale;
+        if (el.getAttribute('stroke-width')) {
+          el.setAttribute('stroke-width', sw.toFixed(3));
+        }
+      }
+      drawSelectionUI();
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      pushHistory();
+      markDirty();
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  // Also patch startHandleDrag to route to our startResize
+  const __orig_startHandleDrag = startHandleDrag;
+  startHandleDrag = function(e) {
+    const handle = e.target.dataset.handle;
+    const sel = EditorState.selectedElements;
+    if (sel && sel.length > 1 && handle && handle !== 'rotate') {
+      e.preventDefault();
+      e.stopPropagation();
+      startResize(e, handle);
+      return;
+    }
+    __orig_startHandleDrag(e);
+  };
+
+  // Patch drawSelectionUI for multi-select to add resize handles on corners
+  const __orig_drawSel_f8 = drawSelectionUI;
+  drawSelectionUI = function() {
+    __orig_drawSel_f8();
+    const sel = EditorState.selectedElements;
+    if (!sel || sel.length <= 1) return;
+
+    const overlay = document.getElementById('selection-overlay');
+    if (!overlay || overlay.style.display === 'none') return;
+
+    // Add corner handles for multi-select resize
+    const handles = ['nw', 'ne', 'sw', 'se'];
+    handles.forEach(h => {
+      if (overlay.querySelector('[data-handle="' + h + '"]')) return;
+      const hEl = document.createElement('div');
+      hEl.className = 'handle';
+      hEl.dataset.handle = h;
+      hEl.style.cssText = 'position:absolute;width:10px;height:10px;background:#fff;border:2px solid var(--accent,#174607);border-radius:2px;cursor:' + h + '-resize;';
+      if (h.includes('n')) hEl.style.top = '-5px'; else hEl.style.bottom = '-5px';
+      if (h.includes('w')) hEl.style.left = '-5px'; else hEl.style.right = '-5px';
+      hEl.addEventListener('mousedown', startHandleDrag);
+      overlay.appendChild(hEl);
+    });
+  };
+})();
 
 </script>
 </body>
