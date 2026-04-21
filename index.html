@@ -10761,6 +10761,13 @@ function startResize(e, handle) {
     if (handle === 'n' || handle === 's') sxFactor = 1;
     if (handle === 'e' || handle === 'w') syFactor = 1;
 
+    // Corner handles: lock aspect ratio
+    if (handle.length === 2) {
+      const uniform = Math.abs(sxFactor - 1) > Math.abs(syFactor - 1) ? sxFactor : syFactor;
+      sxFactor = uniform;
+      syFactor = uniform;
+    }
+
     if (Math.abs(sxFactor) < 0.05) sxFactor = 0.05;
     if (Math.abs(syFactor) < 0.05) syFactor = 0.05;
 
@@ -15992,12 +15999,19 @@ if (document.readyState === 'loading') {
       const dx = (ev.clientX - startX) * pxToSvgX;
       const dy = (ev.clientY - startY) * pxToSvgY;
 
-      // Uniform scale factor from corner drag
+      // Uniform scale — lock aspect ratio for corners
       let sxFactor = 1, syFactor = 1;
       if (handle.includes('e')) sxFactor = (unionW + dx) / unionW;
       if (handle.includes('w')) sxFactor = (unionW - dx) / unionW;
       if (handle.includes('s')) syFactor = (unionH + dy) / unionH;
       if (handle.includes('n')) syFactor = (unionH - dy) / unionH;
+
+      // Corner handles: lock aspect ratio (use the larger movement)
+      if (handle.length === 2) {
+        const uniform = Math.abs(sxFactor - 1) > Math.abs(syFactor - 1) ? sxFactor : syFactor;
+        sxFactor = uniform;
+        syFactor = uniform;
+      }
 
       // Clamp
       sxFactor = Math.max(0.05, sxFactor);
