@@ -10214,8 +10214,27 @@ function saveDuplicates() {
   try { localStorage.setItem(DUPLICATES_STORAGE_KEY, JSON.stringify(dupes)); } catch {}
 }
 
+// Deleted cards blacklist (persists across refresh)
+const DELETED_STORAGE_KEY = 'homeflash-gallery-deleted';
+function loadDeleted() {
+  try { return JSON.parse(localStorage.getItem(DELETED_STORAGE_KEY) || '[]'); } catch { return []; }
+}
+function saveDeleted(list) {
+  try { localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(list)); } catch {}
+}
+function markFileDeleted(file) {
+  const list = loadDeleted();
+  if (!list.includes(file)) { list.push(file); saveDeleted(list); }
+}
+
 // Restore saved duplicates
 loadDuplicates().forEach(d => { d._isDuplicate = true; items.push(d); });
+
+// Remove previously deleted cards
+const deletedFiles = new Set(loadDeleted());
+for (let i = items.length - 1; i >= 0; i--) {
+  if (deletedFiles.has(items[i].file)) items.splice(i, 1);
+}
 
 // Populate grids
 const byCategory = { hero: [], 'install-dark': [], 'install-light': [] };
@@ -15260,6 +15279,9 @@ if (document.readyState === 'loading') {
       // Save duplicates list if it was a duplicate
       if (item._isDuplicate) saveDuplicates();
 
+      // Persist deletion so it survives refresh
+      markFileDeleted(item.file);
+
       // Remove DOM card
       card.remove();
       updateCounts();
@@ -15272,7 +15294,6 @@ if (document.readyState === 'loading') {
   // Retroactively add delete buttons to all cards already in the DOM
   document.querySelectorAll('.card').forEach(cardEl => {
     if (cardEl.querySelector('.card-delete-btn')) return;
-    // Find the item associated with this card
     const file = cardEl.dataset.file;
     const item = items.find(i => i.file.toLowerCase() === file);
     if (!item) return;
@@ -15290,6 +15311,7 @@ if (document.readyState === 'loading') {
       if (catArr) { const ci = catArr.indexOf(item); if (ci >= 0) catArr.splice(ci, 1); }
       if (!item._isDuplicate) { const edits = loadEdits(); if (edits[item.file]) { delete edits[item.file]; saveEditsToStorage(edits); } }
       if (item._isDuplicate) saveDuplicates();
+      markFileDeleted(item.file);
       cardEl.remove();
       updateCounts();
     });
