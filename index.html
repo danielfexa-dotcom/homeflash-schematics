@@ -15320,111 +15320,24 @@ if (document.readyState === 'loading') {
 })();
 
 // ============================================================
-// FEATURE 2: CROSS-CARD COPY/PASTE (viewBox-aware)
+// FEATURE 2: CROSS-CARD COPY/PASTE
+// Paste raw outerHTML with exact same coordinates — no transform math.
 // ============================================================
 (function() {
-  const __orig_copySelected = copySelected;
-  copySelected = function() {
-    __orig_copySelected();
-    const svg = EditorState.workingSvgElement;
-    if (svg && EditorState.clipboard && EditorState.clipboard.length > 0) {
-      const vb = svg.viewBox && svg.viewBox.baseVal;
-      EditorState.clipboardViewBox = vb
-        ? { x: vb.x, y: vb.y, width: vb.width, height: vb.height }
-        : null;
-      // Store source SVG identity so we know if pasting into a different card
-      EditorState.clipboardSvgId = svg.getAttribute('data-clipboard-id') || (function() {
-        const id = 'svg-' + Date.now();
-        svg.setAttribute('data-clipboard-id', id);
-        return id;
-      })();
-    }
-  };
-
   const __orig_pasteClipboard = pasteClipboard;
   pasteClipboard = function() {
     if (!EditorState.clipboard || EditorState.clipboard.length === 0) return;
     const svg = EditorState.workingSvgElement;
-    if (!svg) { __orig_pasteClipboard(); return; }
+    if (!svg) return;
 
-    // Check if pasting into same SVG — use original behavior (+30px offset)
-    const currentId = svg.getAttribute('data-clipboard-id');
-    if (currentId && currentId === EditorState.clipboardSvgId) {
-      __orig_pasteClipboard();
-      return;
-    }
-
-    // Cross-card paste: place elements centered in destination viewBox
-    const srcVb = EditorState.clipboardViewBox;
-    const dstVbRaw = svg.viewBox && svg.viewBox.baseVal;
-    const dstVb = dstVbRaw
-      ? { x: dstVbRaw.x, y: dstVbRaw.y, width: dstVbRaw.width, height: dstVbRaw.height }
-      : null;
-
-    if (!dstVb) {
-      __orig_pasteClipboard();
-      return;
-    }
-
-    // Parse all elements first to compute source bounding box
-    const parsedEls = [];
+    const newElements = [];
     for (const html of EditorState.clipboard) {
       const wrapper = document.createElement('div');
       wrapper.innerHTML = html;
       const el = wrapper.firstElementChild;
-      if (el) parsedEls.push(el);
-    }
-    if (parsedEls.length === 0) return;
-
-    // Temporarily append to get bboxes, then compute offset
-    const tempG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    tempG.style.visibility = 'hidden';
-    svg.appendChild(tempG);
-    parsedEls.forEach(el => tempG.appendChild(el));
-
-    let srcMinX = Infinity, srcMinY = Infinity, srcMaxX = -Infinity, srcMaxY = -Infinity;
-    try {
-      const gBox = tempG.getBBox();
-      srcMinX = gBox.x; srcMinY = gBox.y;
-      srcMaxX = gBox.x + gBox.width; srcMaxY = gBox.y + gBox.height;
-    } catch {
-      for (const el of parsedEls) {
-        try {
-          const bb = el.getBBox();
-          srcMinX = Math.min(srcMinX, bb.x);
-          srcMinY = Math.min(srcMinY, bb.y);
-          srcMaxX = Math.max(srcMaxX, bb.x + bb.width);
-          srcMaxY = Math.max(srcMaxY, bb.y + bb.height);
-        } catch {}
-      }
-    }
-
-    // Remove from temp group, append directly to SVG
-    const newElements = [];
-    while (tempG.firstChild) {
-      const el = tempG.firstChild;
+      if (!el) continue;
       svg.appendChild(el);
       newElements.push(el);
-    }
-    tempG.remove();
-
-    // Compute offset to center elements in destination viewBox
-    if (isFinite(srcMinX)) {
-      const srcCx = (srcMinX + srcMaxX) / 2;
-      const srcCy = (srcMinY + srcMaxY) / 2;
-      const dstCx = dstVb.x + dstVb.width / 2;
-      const dstCy = dstVb.y + dstVb.height / 2;
-      const dx = dstCx - srcCx;
-      const dy = dstCy - srcCy;
-
-      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
-        for (const el of newElements) {
-          const t = parseTransform(el);
-          t.tx += dx;
-          t.ty += dy;
-          applyTransform(el, t);
-        }
-      }
     }
 
     EditorState.selectedElements = newElements;
